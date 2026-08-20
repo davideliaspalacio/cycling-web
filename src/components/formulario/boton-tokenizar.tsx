@@ -39,13 +39,25 @@ export function BotonTokenizarWompi({
     contenedor.current.appendChild(script);
   }, [publicKey]);
 
-  // Wompi envía el formulario por su cuenta al cerrar el modal. La navegación
-  // deja la página quieta varios segundos, así que tapamos con la cortina.
+  // Wompi envía el formulario al cerrar el modal, y el cobro tarda ~11 s con
+  // la página quieta. Sin cortina el ciclista solo ve girar la pestaña.
   useEffect(() => {
     const form = contenedor.current;
     if (!form) return;
+
     const alEnviar = () => setEnviando(true);
     form.addEventListener("submit", alEnviar);
+
+    // Wompi usa form.submit(), que —a diferencia de requestSubmit()— NO
+    // dispara el evento 'submit'. Envolvemos el método para poder pintar la
+    // cortina antes de que arranque la navegación.
+    const nativo = HTMLFormElement.prototype.submit.bind(form);
+    form.submit = () => {
+      alEnviar();
+      // Un respiro para que React alcance a pintar antes de navegar.
+      setTimeout(nativo, 80);
+    };
+
     // Si el ciclista vuelve atrás, la página se restaura desde caché.
     const alVolver = () => setEnviando(false);
     window.addEventListener("pageshow", alVolver);

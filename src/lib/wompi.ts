@@ -15,9 +15,9 @@ import { createHash, randomUUID } from "node:crypto";
 export type ModoWompi = "simulacion" | "sandbox" | "produccion";
 
 export const MODO: ModoWompi = (() => {
-  const forzado = process.env.WOMPI_MODO as ModoWompi | undefined;
+  const forzado = process.env.WOMPI_MODO?.trim() as ModoWompi | undefined;
   if (forzado) return forzado;
-  return process.env.WOMPI_LLAVE_PRIVADA ? "sandbox" : "simulacion";
+  return process.env.WOMPI_LLAVE_PRIVADA?.trim() ? "sandbox" : "simulacion";
 })();
 
 const BASES: Record<Exclude<ModoWompi, "simulacion">, string> = {
@@ -25,16 +25,28 @@ const BASES: Record<Exclude<ModoWompi, "simulacion">, string> = {
   produccion: "https://production.wompi.co/v1",
 };
 
-export const LLAVE_PUBLICA =
-  process.env.NEXT_PUBLIC_WOMPI_LLAVE_PUBLICA ?? "pub_test_SIMULACION";
-const LLAVE_PRIVADA = process.env.WOMPI_LLAVE_PRIVADA ?? "prv_test_SIMULACION";
-const SECRETO_INTEGRIDAD =
-  process.env.WOMPI_SECRETO_INTEGRIDAD ?? "test_integrity_SIMULACION";
-const SECRETO_EVENTOS = process.env.WOMPI_SECRETO_EVENTOS ?? "test_events_SIMULACION";
+/** Wompi ha movido el host del sandbox más de una vez; se puede forzar. */
+const BASE_FORZADA = process.env.WOMPI_URL_BASE?.trim();
+
+/** Una variable declarada pero vacía cuenta como ausente. */
+const env = (nombre: string, respaldo: string) =>
+  process.env[nombre]?.trim() || respaldo;
+
+export const LLAVE_PUBLICA = env(
+  "NEXT_PUBLIC_WOMPI_LLAVE_PUBLICA",
+  "pub_test_SIMULACION",
+);
+const LLAVE_PRIVADA = env("WOMPI_LLAVE_PRIVADA", "prv_test_SIMULACION");
+const SECRETO_INTEGRIDAD = env(
+  "WOMPI_SECRETO_INTEGRIDAD",
+  "test_integrity_SIMULACION",
+);
+const SECRETO_EVENTOS = env("WOMPI_SECRETO_EVENTOS", "test_events_SIMULACION");
 
 export const URL_CHECKOUT = "https://checkout.wompi.co/p/";
 
-function base(): string {
+export function base(): string {
+  if (BASE_FORZADA) return BASE_FORZADA;
   return MODO === "simulacion" ? BASES.sandbox : BASES[MODO];
 }
 
@@ -238,6 +250,12 @@ export async function cobrarConFuente(params: {
   correo: string;
   /** Pista de simulación: número de tarjeta usado al tokenizar. */
   tarjetaSimulada?: string;
+  /**
+   * Cuánto esperar a que Wompi liquide. En el flujo interactivo vale la pena
+   * esperar unos segundos para darle respuesta al ciclista; en el barrido
+   * nocturno se pone en 0 y deja que el webhook cierre el ciclo.
+   */
+  esperaMs?: number;
 }): Promise<ResultadoCobro> {
   if (MODO === "simulacion") {
     // Basta con los últimos 4: así el reintento de una cuota se comporta
@@ -261,10 +279,39 @@ export async function cobrarConFuente(params: {
       reference: params.referencia,
       payment_source_id: params.fuentePagoId,
       payment_method: { installments: 1 },
+      // Wompi exige la firma también en los cobros por API, no solo en el
+      // checkout: sin ella devuelve 422 y el cobro mensual nunca ocurre.
+      signature: firmaIntegridad(params.referencia, params.centavos),
       recurrent: true,
     },
   });
-  return { id: r.data.id, estado: r.data.status, mensaje: r.data.status_message };
+  return esperarLiquidacion(
+    { id: r.data.id, estado: r.data.status, mensaje: r.data.status_message },
+    params.esperaMs ?? 10_000,
+  );
+}
+
+/**
+ * Wompi crea la transacción en PENDING y la liquida en diferido. Consultamos
+ * unas cuantas veces antes de rendirnos; si sigue pendiente se devuelve como
+ * tal y el webhook la cierra.
+ */
+async function esperarLiquidacion(
+  inicial: ResultadoCobro,
+  esperaMs: number,
+): Promise<ResultadoCobro> {
+  if (inicial.estado !== "PENDING" || esperaMs <= 0) return inicial;
+  const limite = Date.now() + esperaMs;
+  let actual = inicial;
+  while (actual.estado === "PENDING" && Date.now() < limite) {
+    await new Promise((r) => setTimeout(r, 1500));
+    try {
+      actual = await consultarTransaccion(inicial.id);
+    } catch {
+      break; // si la consulta falla, que decida el webhook
+    }
+  }
+  return actual;
 }
 
 export async function consultarTransaccion(id: string): Promise<ResultadoCobro> {
@@ -273,12 +320,69 @@ export async function consultarTransaccion(id: string): Promise<ResultadoCobro> 
   }
   const r = await pedir<{
     data: { id: string; status: ResultadoCobro["estado"]; status_message?: string };
-  }>(`/transactions/${id}`, { llave: LLAVE_PRIVADA });
+    // Consultar una transacción es público en Wompi: no gasta la llave privada.
+  }>(`/transactions/${id}`, { llave: LLAVE_PUBLICA });
   return { id: r.data.id, estado: r.data.status, mensaje: r.data.status_message };
 }
 
-/* -------------------------- Checkout web (pago de contado) ------------------------ */
+/* ------------------------------- Widget de Wompi ---------------------------------- */
 
+/**
+ * Configuración que el navegador le pasa a `new WidgetCheckout(...)`.
+ *
+ * La firma de integridad se calcula aquí, en el servidor: el secreto nunca
+ * viaja al cliente. Lo único público es la llave `pub_`.
+ */
+export type ConfigWidget = {
+  publicKey: string;
+  currency: "COP";
+  amountInCents: number;
+  reference: string;
+  signature: { integrity: string };
+  redirectUrl?: string;
+  expirationTime?: string;
+  customerData?: {
+    email: string;
+    fullName?: string;
+    phoneNumber?: string;
+    /** Obligatorio en cuanto se manda phoneNumber, aunque no lo diga el manual. */
+    phoneNumberPrefix?: string;
+  };
+};
+
+export function configuracionDeWidget(params: {
+  referencia: string;
+  centavos: number;
+  correo: string;
+  nombre?: string;
+  telefono?: string;
+  urlRetorno?: string;
+  /** Minutos que el usuario tiene para completar el pago. */
+  minutosParaPagar?: number;
+}): ConfigWidget {
+  const expira = params.minutosParaPagar
+    ? new Date(Date.now() + params.minutosParaPagar * 60_000).toISOString()
+    : undefined;
+
+  return {
+    publicKey: LLAVE_PUBLICA,
+    currency: "COP",
+    amountInCents: params.centavos,
+    reference: params.referencia,
+    signature: { integrity: firmaIntegridad(params.referencia, params.centavos) },
+    redirectUrl: params.urlRetorno,
+    expirationTime: expira,
+    customerData: {
+      email: params.correo,
+      fullName: params.nombre,
+      ...(params.telefono
+        ? { phoneNumber: params.telefono, phoneNumberPrefix: "+57" }
+        : {}),
+    },
+  };
+}
+
+/** Mismo checkout pero como URL, para abrirlo en pestaña en vez de modal. */
 export function urlDeCheckout(params: {
   referencia: string;
   centavos: number;
@@ -295,4 +399,22 @@ export function urlDeCheckout(params: {
     "customer-data:email": params.correo,
   });
   return `${URL_CHECKOUT}?${qs.toString()}`;
+}
+
+/**
+ * Crea la fuente de pago a partir del token que devuelve el widget en modo
+ * `tokenize`. Es el puente entre el modal de Wompi y el cobro por cuotas:
+ * el modal captura la tarjeta (nunca pasa por nuestro servidor) y nos entrega
+ * un token; con él pedimos la fuente de pago reutilizable.
+ */
+export async function fuenteDesdeTokenDelWidget(params: {
+  token: string;
+  correo: string;
+}): Promise<number> {
+  const aceptaciones = await obtenerAceptaciones();
+  return crearFuenteDePago({
+    token: params.token,
+    correo: params.correo,
+    aceptaciones,
+  });
 }

@@ -1,6 +1,7 @@
 import { Encabezado } from "@/components/marco";
 import { FormularioInscripcion } from "@/components/formulario/inscripcion";
 import { categoriaPorCodigo } from "@/lib/catalogo";
+import { MODO } from "@/lib/wompi";
 
 export const metadata = {
   title: "Inscripción — Tibet Epic XCM 2027",
@@ -17,7 +18,7 @@ export default async function PaginaInscripcion({
     <>
       <Encabezado compacto />
       <main className="flex-1">
-        <FormularioInscripcion categoriaInicial={valida} />
+        <FormularioInscripcion categoriaInicial={valida} modoWompi={MODO} />
       </main>
     </>
   );

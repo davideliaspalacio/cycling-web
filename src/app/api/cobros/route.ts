@@ -10,7 +10,8 @@ export const maxDuration = 300;
  * Cobra lo vencido y manda recordatorios de lo que vence en tres días.
  */
 export async function GET(peticion: Request) {
-  const secreto = process.env.CRON_SECRETO;
+  // Vercel manda "Authorization: Bearer $CRON_SECRET" con ese nombre exacto.
+  const secreto = process.env.CRON_SECRET ?? process.env.CRON_SECRETO;
   const autorizacion = peticion.headers.get("authorization");
   if (secreto && autorizacion !== `Bearer ${secreto}`) {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });

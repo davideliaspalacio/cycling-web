@@ -13,7 +13,7 @@ export const metadata = {
 export default async function PaginaPortal({
   searchParams,
 }: PageProps<"/mi-inscripcion">) {
-  const { ref } = await searchParams;
+  const { ref, error } = await searchParams;
 
   // El enlace de los correos trae ?ref=; lo resolvemos aquí para que la
   // página llegue ya pintada, sin un parpadeo de carga.
@@ -27,6 +27,7 @@ export default async function PaginaPortal({
         <PortalCiclista
           vistaInicial={inscripcion ? vistaPublica(inscripcion) : null}
           modoDemo={MODO === "simulacion"}
+          avisoInicial={typeof error === "string" ? error : undefined}
         />
       </main>
       <Pie />

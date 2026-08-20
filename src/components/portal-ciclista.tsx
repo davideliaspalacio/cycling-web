@@ -19,6 +19,11 @@ type Vista = {
   cuotas: Cuota[];
   proxima: Cuota | null;
   tarjeta: { marca: string; ultimos4: string } | null;
+  autorizacion: {
+    aceptadaEn: string;
+    texto: string;
+    ip?: string;
+  } | null;
 };
 
 const ETIQUETA_ESTADO: Record<EstadoInscripcion, { texto: string; tono: "lima" | "naranja" | "magenta" | "hueso" }> = {
@@ -32,15 +37,18 @@ const ETIQUETA_ESTADO: Record<EstadoInscripcion, { texto: string; tono: "lima" |
 export function PortalCiclista({
   vistaInicial,
   modoDemo,
+  avisoInicial,
 }: {
   /** Ya resuelta en el servidor cuando el enlace del correo trae ?ref=. */
   vistaInicial: Vista | null;
   modoDemo: boolean;
+  /** Mensaje que trae la redirección del checkout de Wompi. */
+  avisoInicial?: string;
 }) {
   const [vista, setVista] = useState<Vista | null>(vistaInicial);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [aviso, setAviso] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(avisoInicial ?? null);
   const [cobrando, setCobrando] = useState(false);
   const [busqueda, setBusqueda] = useState({ identificacion: "", correo: "" });
 
@@ -67,18 +75,14 @@ export function PortalCiclista({
     }
   }, []);
 
-  async function cobrarSiguiente() {
-    if (!vista?.proxima) return;
+  async function cobrar(ruta: "/api/pagos/cuota" | "/api/pagos/saldar", cuerpo: object) {
     setCobrando(true);
     setAviso(null);
     try {
-      const res = await fetch("/api/pagos/cuota", {
+      const res = await fetch(ruta, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          referencia: vista.referencia,
-          numero: vista.proxima.numero,
-        }),
+        body: JSON.stringify(cuerpo),
       });
       const datos = await res.json();
       if (!res.ok) {
@@ -86,11 +90,13 @@ export function PortalCiclista({
         return;
       }
       setAviso(
-        datos.aprobado
-          ? `Cuota ${datos.numero} cobrada. Te llegó el comprobante por correo.`
-          : `El banco rechazó el cobro: ${datos.mensaje}`,
+        datos.enProceso
+          ? "El cobro está en curso. Te confirmamos por correo apenas el banco responda."
+          : datos.aprobado
+            ? "Cobro aprobado. Te llegó el comprobante por correo."
+            : `El banco rechazó el cobro: ${datos.mensaje ?? ""}`,
       );
-      await consultar({ referencia: vista.referencia });
+      await consultar({ referencia: vista!.referencia });
     } finally {
       setCobrando(false);
     }
@@ -210,9 +216,11 @@ export function PortalCiclista({
               className={`h-5 flex-1 rounded-md border-[3px] border-tinta transition-colors duration-500 ${
                 c.estado === "PAGADA"
                   ? "bg-lima"
-                  : c.estado === "FALLIDA" || c.estado === "VENCIDA"
-                    ? "bg-magenta"
-                    : "bg-white"
+                  : c.estado === "EN_PROCESO"
+                    ? "bg-cielo"
+                    : c.estado === "FALLIDA" || c.estado === "VENCIDA"
+                      ? "bg-magenta"
+                      : "bg-white"
               }`}
               title={`Cuota ${c.numero}: ${c.estado.toLowerCase()}`}
             />
@@ -236,11 +244,32 @@ export function PortalCiclista({
 
         {vista.saldo > 0 && vista.proxima && (
           <div className="mt-5 flex flex-wrap items-center gap-3">
-            <Boton onClick={cobrarSiguiente} disabled={cobrando}>
+            <Boton
+              onClick={() =>
+                cobrar("/api/pagos/cuota", {
+                  referencia: vista.referencia,
+                  numero: vista.proxima!.numero,
+                })
+              }
+              disabled={cobrando}
+            >
               {cobrando
                 ? "Cobrando…"
                 : `Adelantar la cuota ${vista.proxima.numero} · ${pesos(vista.proxima.monto)}`}
             </Boton>
+
+            {vista.saldo > vista.proxima.monto && (
+              <Boton
+                tono="naranja"
+                onClick={() =>
+                  cobrar("/api/pagos/saldar", { referencia: vista.referencia })
+                }
+                disabled={cobrando}
+              >
+                Pagar todo el saldo · {pesos(vista.saldo)}
+              </Boton>
+            )}
+
             {modoDemo && (
               <span className="raya-mono text-[0.68rem] uppercase tracking-widest text-tinta/40">
                 En la demo, este botón simula el cobro del mes
@@ -278,7 +307,9 @@ export function PortalCiclista({
                   <span className="block font-display text-[0.95rem] font-extrabold text-tinta">
                     {c.estado === "PAGADA"
                       ? `Pagada el ${fechaLarga((c.pagadaEn ?? c.vence).slice(0, 10))}`
-                      : `Se cobra el ${fechaLarga(c.vence)}`}
+                      : c.estado === "EN_PROCESO"
+                        ? "Cobro en curso, confirmando con el banco"
+                        : `Se cobra el ${fechaLarga(c.vence)}`}
                   </span>
                   <span className="raya-mono block text-[0.7rem] text-tinta/50">
                     {c.transaccionId ?? c.referencia}
@@ -292,6 +323,24 @@ export function PortalCiclista({
           ))}
         </ol>
       </section>
+
+      {vista.autorizacion && (
+        <section className="mt-6">
+          <Tarjeta tono="selva" className="p-5">
+            <p className="font-mono text-[0.64rem] font-bold uppercase tracking-[0.16em] text-hueso/45">
+              Autorización de cobro
+            </p>
+            <p className="mt-2 text-[0.88rem] leading-relaxed text-hueso/75">
+              {vista.autorizacion.texto}
+            </p>
+            <p className="raya-mono mt-2 text-[0.7rem] text-hueso/35">
+              Aceptada el{" "}
+              {new Date(vista.autorizacion.aceptadaEn).toLocaleString("es-CO")}
+              {vista.autorizacion.ip ? ` · ${vista.autorizacion.ip}` : ""}
+            </p>
+          </Tarjeta>
+        </section>
+      )}
 
       <p className="mt-8 text-[0.85rem] leading-relaxed text-hueso/45">
         Todos los movimientos te llegan a {vista.ciclista.correo}.{" "}

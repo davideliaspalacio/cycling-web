@@ -52,8 +52,10 @@ type Errores = Record<string, string>;
 
 export function FormularioInscripcion({
   categoriaInicial,
+  modoWompi,
 }: {
   categoriaInicial?: string;
+  modoWompi: "simulacion" | "sandbox" | "produccion";
 }) {
   const router = useRouter();
   const [paso, setPaso] = useState(categoriaInicial ? 1 : 0);
@@ -228,6 +230,7 @@ export function FormularioInscripcion({
             categoria={categoria}
             ciclista={ciclista}
             tallas={tallas}
+            modoWompi={modoWompi}
             onCompletado={() => router.push(`/mi-inscripcion?ref=${referencia}`)}
           />
         )}

@@ -1,36 +1,32 @@
 "use client";
 
 import { useState } from "react";
-import { Boton, Campo, Chip, Tarjeta } from "@/components/ui";
+import { Boton, Chip, Tarjeta } from "@/components/ui";
 import { calendarioDeCuotas, fechaLarga, pesos } from "@/lib/dinero";
+import { textoDeAutorizacion } from "@/lib/autorizacion";
 import type { Categoria, DatosCiclista, PlanPago, Tallas } from "@/lib/tipos";
-
-const TARJETAS_PRUEBA = [
-  { numero: "4242 4242 4242 4242", que: "aprueba" },
-  { numero: "4111 1111 1111 1111", que: "rechaza" },
-];
+import { abrirCobro } from "./wompi-widget";
+import { BotonTokenizarWompi } from "./boton-tokenizar";
+import { Procesando } from "./procesando";
 
 export function PasoPago({
   referencia,
   categoria,
   ciclista,
   tallas,
+  modoWompi,
   onCompletado,
 }: {
   referencia: string;
   categoria: Categoria;
   ciclista: DatosCiclista;
   tallas: Tallas;
+  /** "simulacion" mientras no haya llaves; con llaves, abre el modal real. */
+  modoWompi: "simulacion" | "sandbox" | "produccion";
   onCompletado: () => void;
 }) {
   const [plan, setPlan] = useState<PlanPago>("CONTADO");
-  const [tarjeta, setTarjeta] = useState({
-    numero: "",
-    titular: "",
-    mesExp: "",
-    anioExp: "",
-    cvc: "",
-  });
+  const [autorizado, setAutorizado] = useState(false);
   const [cobrando, setCobrando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exito, setExito] = useState<{
@@ -39,36 +35,81 @@ export function PasoPago({
     saldo: number;
   } | null>(null);
 
+  const simulado = modoWompi === "simulacion";
   const cuotas = calendarioDeCuotas(categoria.precio, referencia);
   const primerCobro = plan === "CUOTAS" ? cuotas[0].monto : categoria.precio;
 
-  async function pagar() {
+  function aplicarRespuesta(datos: {
+    aprobado: boolean;
+    mensaje?: string;
+    plan?: PlanPago;
+    pagado: number;
+    saldo: number;
+  }) {
+    if (!datos.aprobado) {
+      setError(
+        `${datos.mensaje ?? "El banco rechazó el pago."} Tu inscripción ${referencia} queda guardada; puedes intentar con otro medio.`,
+      );
+      return;
+    }
+    setExito({
+      plan: datos.plan ?? plan,
+      pagado: datos.pagado,
+      saldo: datos.saldo,
+    });
+  }
+
+  /* ------------------------- Camino real: el modal ------------------------- */
+
+  async function pagarConWompi() {
     setError(null);
     setCobrando(true);
     try {
-      const res = await fetch("/api/pagos", {
+      const preparar = await fetch("/api/pagos/widget", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ referencia, plan, tarjeta }),
+        body: JSON.stringify({ referencia, plan }),
       });
-      const datos = await res.json();
-      if (!res.ok) {
-        setError(datos.error ?? "No pudimos procesar el pago.");
+      const config = await preparar.json();
+      if (!preparar.ok) {
+        setError(config.error ?? "No pudimos preparar el pago.");
         return;
       }
-      if (!datos.aprobado) {
-        setError(
-          `${datos.mensaje ?? "El banco rechazó el cobro."} Prueba con otra tarjeta — tu inscripción ${referencia} queda guardada.`,
-        );
+
+      if (plan === "CONTADO") {
+        const transaccion = await abrirCobro(config.widget, {
+          urlRespaldo: config.urlCheckout,
+        });
+        if (!transaccion) {
+          setError("Cerraste el checkout antes de terminar. Puedes reintentar.");
+          return;
+        }
+        const res = await fetch("/api/pagos/confirmar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ referencia, transaccionId: transaccion.id }),
+        });
+        const datos = await res.json();
+        if (!res.ok) {
+          setError(datos.error ?? "No pudimos confirmar el pago.");
+          return;
+        }
+        aplicarRespuesta({ ...datos, plan: "CONTADO" });
         return;
       }
-      setExito({ plan: datos.plan, pagado: datos.pagado, saldo: datos.saldo });
-    } catch {
-      setError("Se cayó la conexión antes de confirmar. Revisa tu correo antes de reintentar.");
+
+      // Las cuotas van por el formulario de tokenización de Wompi.
+      return;
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Se cayó la conexión con la pasarela.",
+      );
     } finally {
       setCobrando(false);
     }
   }
+
+  /* -------------------------------- Éxito --------------------------------- */
 
   if (exito) {
     return (
@@ -99,7 +140,9 @@ export function PasoPago({
           <span className="font-mono text-[0.66rem] font-bold uppercase tracking-[0.16em] text-tinta/55">
             Referencia
           </span>
-          <span className="raya-mono text-lg font-bold text-tinta">{referencia}</span>
+          <span className="raya-mono text-lg font-bold text-tinta">
+            {referencia}
+          </span>
         </div>
 
         <div className="mt-7 flex flex-wrap gap-3">
@@ -119,6 +162,12 @@ export function PasoPago({
 
   return (
     <div className="flex flex-col gap-5">
+      <Procesando
+        visible={cobrando}
+        titulo="Confirmando tu pago"
+        detalle="Le estamos preguntando a Wompi cómo quedó la transacción. Puede tardar unos segundos."
+      />
+
       {/* ------------------------------ Resumen ------------------------------ */}
       <Tarjeta tono="selva" className="p-6 sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -130,7 +179,8 @@ export function PasoPago({
               {categoria.nombre}
             </h1>
             <p className="mt-1 text-[0.88rem] text-hueso/60">
-              {ciclista.nombres} {ciclista.apellidos} · CC {ciclista.identificacion}
+              {ciclista.nombres} {ciclista.apellidos} · CC{" "}
+              {ciclista.identificacion}
             </p>
           </div>
           <span className="raya-mono rounded-xl border-[3px] border-tinta bg-noche px-3 py-2 text-sm font-bold text-lima">
@@ -140,7 +190,10 @@ export function PasoPago({
 
         <dl className="mt-5 grid gap-x-6 gap-y-2 border-t-2 border-dashed border-hueso/15 pt-4 text-[0.85rem] sm:grid-cols-2">
           {[
-            ["Recorrido", `${categoria.km} km · ${categoria.desnivel.toLocaleString("es-CO")} m D+`],
+            [
+              "Recorrido",
+              `${categoria.km} km · ${categoria.desnivel.toLocaleString("es-CO")} m D+`,
+            ],
             ["Ciudad", `${ciclista.ciudad}, ${ciclista.departamento}`],
             ["Jersey / camiseta", `${tallas.jersey} / ${tallas.running}`],
             ["Correo", ciclista.correo],
@@ -165,7 +218,7 @@ export function PasoPago({
             onElegir={() => setPlan("CONTADO")}
             titulo="Todo de una"
             monto={pesos(categoria.precio)}
-            detalle="Un solo cobro hoy. El cupo queda confirmado de inmediato."
+            detalle="Tarjeta, PSE, Nequi o corresponsal. El cupo queda confirmado de inmediato."
             tono="lima"
           />
           <OpcionPlan
@@ -202,132 +255,96 @@ export function PasoPago({
               ))}
             </ol>
             <p className="mt-3 text-[0.8rem] leading-snug text-tinta/55">
-              Guardamos tu tarjeta con Wompi, no en nuestros servidores. Puedes
+              La tarjeta la guarda Wompi, nunca nuestros servidores. Puedes
               adelantar cuotas o cambiar de tarjeta cuando quieras.
             </p>
+
+            {/* Autorización de cobro recurrente. Sin esta constancia, un
+                contracargo por "yo no autoricé eso" lo pierde el comercio. */}
+            <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-2xl border-[3px] border-tinta bg-white px-4 py-3.5 shadow-[3px_3px_0_0_var(--color-tinta)]">
+              <input
+                type="checkbox"
+                checked={autorizado}
+                onChange={(e) => setAutorizado(e.target.checked)}
+                className="sr-only"
+              />
+              <span
+                aria-hidden
+                className={`mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-md border-[3px] border-tinta ${
+                  autorizado ? "bg-tinta" : "bg-white"
+                }`}
+              >
+                {autorizado && (
+                  <svg viewBox="0 0 20 20" className="h-3.5 w-3.5 fill-lima">
+                    <path d="M7.6 14.6 3.4 10.4l1.6-1.6 2.6 2.6 6.8-6.8 1.6 1.6z" />
+                  </svg>
+                )}
+              </span>
+              <span className="text-[0.86rem] leading-snug text-tinta">
+                {textoDeAutorizacion(cuotas)}
+              </span>
+            </label>
+
+            {/* El botón está siempre visible: esconderlo hasta marcar la
+                casilla hacía creer que no había forma de pagar. Se muestra
+                apagado y sin clic hasta que se autorice. */}
+            <div className="mt-4">
+              <p className="text-[0.85rem] leading-snug text-tinta/70">
+                Wompi te va a pedir la tarjeta y la guarda de su lado. Al
+                terminar cobramos {pesos(cuotas[0].monto)} y programamos las
+                otras tres.
+              </p>
+
+              <div
+                className={
+                  autorizado
+                    ? ""
+                    : "pointer-events-none select-none opacity-40 grayscale"
+                }
+                aria-disabled={!autorizado}
+              >
+                <BotonTokenizarWompi
+                  publicKey={process.env.NEXT_PUBLIC_WOMPI_LLAVE_PUBLICA ?? ""}
+                  referencia={referencia}
+                />
+              </div>
+
+              {!autorizado && (
+                <p className="mt-2 text-[0.82rem] font-semibold text-[#b45309]">
+                  ↑ Marca la autorización de arriba para habilitar el botón.
+                </p>
+              )}
+            </div>
           </Tarjeta>
         )}
       </fieldset>
 
-      {/* ------------------------------ Tarjeta ------------------------------ */}
+      {/* ------------------------------- Cobro ------------------------------- */}
+      {plan === "CONTADO" && (
       <Tarjeta tono="hueso" className="p-6 sm:p-7">
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-display text-lg font-extrabold tracking-tight text-tinta">
-            Datos de la tarjeta
+            Paga con Wompi
           </h2>
           <span className="raya-mono text-[0.66rem] font-bold uppercase tracking-[0.12em] text-tinta/45">
-            Wompi · Bancolombia
+            Bancolombia
           </span>
         </div>
+        <p className="mt-3 text-[0.92rem] leading-relaxed text-tinta/70">
+          Se abre el checkout de Wompi y ahí eliges cómo pagar: tarjeta, PSE,
+          Nequi, botón Bancolombia o corresponsal bancario. Tus datos de pago no
+          pasan por nosotros.
+        </p>
 
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <Campo id="numero" etiqueta="Número" obligatorio>
-              <input
-                id="numero"
-                className="campo raya-mono"
-                inputMode="numeric"
-                autoComplete="cc-number"
-                placeholder="4242 4242 4242 4242"
-                value={tarjeta.numero}
-                onChange={(e) =>
-                  setTarjeta({
-                    ...tarjeta,
-                    numero: e.target.value
-                      .replace(/\D/g, "")
-                      .slice(0, 19)
-                      .replace(/(.{4})/g, "$1 ")
-                      .trim(),
-                  })
-                }
-              />
-            </Campo>
-          </div>
-
-          <div className="sm:col-span-2">
-            <Campo id="titular" etiqueta="Titular" obligatorio>
-              <input
-                id="titular"
-                className="campo"
-                autoComplete="cc-name"
-                placeholder="Como aparece en la tarjeta"
-                value={tarjeta.titular}
-                onChange={(e) => setTarjeta({ ...tarjeta, titular: e.target.value })}
-              />
-            </Campo>
-          </div>
-
-          <Campo id="mesExp" etiqueta="Vence" obligatorio ayuda="Mes y año, MM / AA.">
-            <div className="flex gap-2">
-              <input
-                id="mesExp"
-                className="campo raya-mono"
-                inputMode="numeric"
-                placeholder="MM"
-                maxLength={2}
-                autoComplete="cc-exp-month"
-                value={tarjeta.mesExp}
-                onChange={(e) =>
-                  setTarjeta({ ...tarjeta, mesExp: e.target.value.replace(/\D/g, "") })
-                }
-              />
-              <input
-                aria-label="Año de vencimiento"
-                className="campo raya-mono"
-                inputMode="numeric"
-                placeholder="AA"
-                maxLength={2}
-                autoComplete="cc-exp-year"
-                value={tarjeta.anioExp}
-                onChange={(e) =>
-                  setTarjeta({ ...tarjeta, anioExp: e.target.value.replace(/\D/g, "") })
-                }
-              />
-            </div>
-          </Campo>
-
-          <Campo id="cvc" etiqueta="Código de seguridad" obligatorio ayuda="Los 3 dígitos del reverso.">
-            <input
-              id="cvc"
-              className="campo raya-mono"
-              inputMode="numeric"
-              maxLength={4}
-              autoComplete="cc-csc"
-              placeholder="123"
-              value={tarjeta.cvc}
-              onChange={(e) =>
-                setTarjeta({ ...tarjeta, cvc: e.target.value.replace(/\D/g, "") })
-              }
-            />
-          </Campo>
-        </div>
-
-        <div className="mt-5 rounded-2xl border-[2.5px] border-dashed border-tinta/25 p-4">
-          <p className="font-mono text-[0.64rem] font-bold uppercase tracking-[0.14em] text-tinta/45">
-            Tarjetas de prueba
+        {simulado && (
+          <p className="mt-4 rounded-2xl border-[3px] border-tinta bg-naranja px-4 py-3 text-[0.86rem] font-semibold leading-snug text-tinta">
+            Faltan las llaves de Wompi, así que el checkout no puede abrirse.
+            Pon <span className="raya-mono">WOMPI_MODO=sandbox</span> con sus
+            llaves en el <span className="raya-mono">.env.local</span>.
           </p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {TARJETAS_PRUEBA.map((t) => (
-              <button
-                key={t.numero}
-                type="button"
-                onClick={() =>
-                  setTarjeta({
-                    numero: t.numero,
-                    titular: `${ciclista.nombres} ${ciclista.apellidos}`.trim() || "CICLISTA PRUEBA",
-                    mesExp: "12",
-                    anioExp: "29",
-                    cvc: "123",
-                  })
-                }
-                className="raya-mono rounded-lg border-[2.5px] border-tinta bg-white px-3 py-1.5 text-[0.72rem] font-bold text-tinta transition-colors hover:bg-lima"
-              >
-                {t.numero} · {t.que}
-              </button>
-            ))}
-          </div>
-        </div>
+        )}
       </Tarjeta>
+      )}
 
       {error && (
         <p
@@ -338,15 +355,21 @@ export function PasoPago({
         </p>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <p className="text-[0.82rem] leading-snug text-hueso/50">
-          Se cobra ahora <strong className="text-hueso">{pesos(primerCobro)}</strong>
-          {plan === "CUOTAS" && " (cuota 1 de 4)"}.
-        </p>
-        <Boton tamano="lg" onClick={pagar} disabled={cobrando}>
-          {cobrando ? "Cobrando…" : `Pagar ${pesos(primerCobro)}`}
-        </Boton>
-      </div>
+      {plan === "CONTADO" && (
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <p className="text-[0.82rem] leading-snug text-hueso/50">
+            Se cobra ahora{" "}
+            <strong className="text-hueso">{pesos(primerCobro)}</strong>.
+          </p>
+          <Boton
+            tamano="lg"
+            onClick={pagarConWompi}
+            disabled={cobrando || simulado}
+          >
+            {cobrando ? "Procesando…" : `Pagar ${pesos(primerCobro)} con Wompi`}
+          </Boton>
+        </div>
+      )}
     </div>
   );
 }

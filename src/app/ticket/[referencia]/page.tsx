@@ -145,9 +145,11 @@ export default async function PaginaTicket({
                   className={`h-3 w-9 rounded-sm border-2 border-hueso/25 ${
                     c.estado === "PAGADA"
                       ? "bg-lima"
-                      : c.estado === "FALLIDA" || c.estado === "VENCIDA"
-                        ? "bg-magenta"
-                        : "bg-transparent"
+                      : c.estado === "EN_PROCESO"
+                        ? "bg-cielo"
+                        : c.estado === "FALLIDA" || c.estado === "VENCIDA"
+                          ? "bg-magenta"
+                          : "bg-transparent"
                   }`}
                 />
               ))}

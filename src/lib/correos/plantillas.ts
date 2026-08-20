@@ -2,6 +2,7 @@ import { EVENTO } from "../catalogo";
 import { fechaLarga, pesos, proximaCuota, saldoPendiente } from "../dinero";
 import type { Inscripcion } from "../tipos";
 import { categoriaPorCodigo } from "../catalogo";
+import { textoDeAutorizacionConfirmado } from "../autorizacion";
 
 /**
  * Plantillas HTML para correo. Tablas e inline styles a propósito:
@@ -55,15 +56,21 @@ function tablaCuotas(ins: Inscripcion): string {
   const filas = ins.cuotas
     .map((c) => {
       const color =
-        c.estado === "PAGADA" ? "#2f7d32" : c.estado === "VENCIDA" ? MAGENTA : GRIS;
+        c.estado === "PAGADA"
+          ? "#2f7d32"
+          : c.estado === "VENCIDA" || c.estado === "FALLIDA"
+            ? MAGENTA
+            : GRIS;
       const etiqueta =
         c.estado === "PAGADA"
           ? "Pagada"
-          : c.estado === "VENCIDA"
-            ? "Vencida"
-            : c.estado === "FALLIDA"
-              ? "Rechazada"
-              : "Programada";
+          : c.estado === "EN_PROCESO"
+            ? "En curso"
+            : c.estado === "VENCIDA"
+              ? "Vencida"
+              : c.estado === "FALLIDA"
+                ? "Rechazada"
+                : "Programada";
       return `<tr>
         <td style="padding:11px 0;border-bottom:1px solid #dfe7dc;font-family:${MONO};font-size:14px;font-weight:700;color:${TINTA}">Cuota ${c.numero}/${ins.cuotas.length}</td>
         <td style="padding:11px 0;border-bottom:1px solid #dfe7dc;font-family:${FUENTE};font-size:13px;color:${GRIS}">${fechaLarga(c.vence)}</td>
@@ -193,7 +200,20 @@ export function planCuotasActivado(ins: Inscripcion): PlantillaCorreo {
     boton("Ver mi plan de pagos", urlPortal(ins)) +
     parrafo(
       `Puedes adelantar cuotas cuando quieras desde tu inscripción, sin costo adicional.`,
-    );
+    ) +
+    // Constancia escrita de la autorización: es lo que pide el banco si algún
+    // día se desconoce un cobro.
+    `<div style="margin:24px 0 0;padding:14px 16px;background:#eef4ea;border-radius:12px">
+      <p style="margin:0 0 6px;font-family:${MONO};font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:${GRIS}">Autorización de cobro</p>
+      <p style="margin:0;font-family:${FUENTE};font-size:13px;line-height:1.55;color:#33453a">
+        ${textoDeAutorizacionConfirmado(ins.cuotas, ins.tarjetaResumen)}
+      </p>
+      ${
+        ins.autorizacionCobro
+          ? `<p style="margin:8px 0 0;font-family:${MONO};font-size:11px;color:${GRIS}">Aceptada el ${new Date(ins.autorizacionCobro.aceptadaEn).toLocaleString("es-CO")}</p>`
+          : ""
+      }
+    </div>`;
   return {
     asunto: `Plan de 4 cuotas activo — cupo reservado en ${cat?.nombre}`,
     html: envoltura({

@@ -43,6 +43,7 @@ export function vistaPublica(ins: Inscripcion) {
     cuotas: ins.cuotas,
     proxima: proximaCuota(ins.cuotas) ?? null,
     tarjeta: ins.tarjetaResumen ?? null,
+    autorizacion: ins.autorizacionCobro ?? null,
   };
 }
 

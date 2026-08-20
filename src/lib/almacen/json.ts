@@ -1,15 +1,15 @@
 import "server-only";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
-import type { CorreoEnviado, Inscripcion } from "./tipos";
+import type { CorreoEnviado, Inscripcion } from "../tipos";
 
 /**
- * Almacén en archivo JSON.
+ * Almacén en archivo JSON — el respaldo para cuando no hay DATABASE_URL.
  *
- * Es a propósito la pieza más reemplazable del sistema: todo el resto de la
- * app habla con este módulo y nunca con el disco. Para pasar a Postgres
- * (Neon/Supabase) se reimplementan estas seis funciones y nada más cambia.
+ * Sirve para levantar el proyecto y ver la demo completa sin base de datos.
+ * No aguanta producción: no hay transacciones ni concurrencia real, y en un
+ * contenedor sin volumen el archivo se pierde en cada despliegue. La versión
+ * de verdad está en `postgres.ts`; `index.ts` escoge entre las dos.
  */
 
 const DIR = path.join(process.cwd(), ".datos");
@@ -41,11 +41,6 @@ async function escribir<T>(archivo: string, tabla: Tabla<T>): Promise<void> {
 }
 
 /* ---------------------------------- Inscripciones --------------------------------- */
-
-export function nuevaReferencia(): string {
-  const sufijo = randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase();
-  return `TE27-${sufijo}`;
-}
 
 export async function listarInscripciones(): Promise<Inscripcion[]> {
   const { registros } = await leer<Inscripcion>(ARCHIVO_INSCRIPCIONES);
@@ -101,6 +96,34 @@ export async function inscripcionDuplicada(
       r.ciclista.identificacion.trim() === identificacion.trim() &&
       r.estado !== "BORRADOR",
   );
+}
+
+/**
+ * Equivalente al reclamo atómico de Postgres, pero aquí no hay transacciones:
+ * es best-effort. Otra razón para no usar este almacén en producción.
+ */
+export async function reclamarCuota(
+  inscripcionId: string,
+  numero: number,
+  minutosAbandono = 15,
+): Promise<{ intentos: number } | null> {
+  return enFila(async () => {
+    const tabla = await leer<Inscripcion>(ARCHIVO_INSCRIPCIONES);
+    const ins = tabla.registros.find((r) => r.id === inscripcionId);
+    const cuota = ins?.cuotas.find((c) => c.numero === numero);
+    if (!ins || !cuota || cuota.estado === "PAGADA") return null;
+    const viejo =
+      !cuota.transaccionId &&
+      (!cuota.ultimoIntentoEn ||
+        Date.now() - new Date(cuota.ultimoIntentoEn).getTime() >
+          minutosAbandono * 60_000);
+    if (cuota.estado === "EN_PROCESO" && !viejo) return null;
+    cuota.estado = "EN_PROCESO";
+    cuota.intentos += 1;
+    cuota.ultimoIntentoEn = new Date().toISOString();
+    await escribir(ARCHIVO_INSCRIPCIONES, tabla);
+    return { intentos: cuota.intentos };
+  });
 }
 
 /* ------------------------------------ Correos ------------------------------------- */

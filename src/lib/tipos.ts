@@ -14,7 +14,17 @@ export type Categoria = {
   destacada?: boolean;
 };
 
-export type EstadoCuota = "PENDIENTE" | "PAGADA" | "VENCIDA" | "FALLIDA";
+/**
+ * EN_PROCESO es la clave para no cobrar dos veces: Wompi responde PENDING y
+ * liquida un par de segundos después. Tratar ese PENDING como fallo hacía que
+ * reintentáramos un cobro que en realidad iba a aprobarse.
+ */
+export type EstadoCuota =
+  | "PENDIENTE"
+  | "EN_PROCESO"
+  | "PAGADA"
+  | "VENCIDA"
+  | "FALLIDA";
 
 export type Cuota = {
   numero: number;
@@ -66,6 +76,19 @@ export type Tallas = {
   running: string;
 };
 
+/**
+ * Constancia de que el ciclista autorizó los cobros futuros. Se guarda tal
+ * como la vio, con hora y huella del navegador: es la evidencia que pide el
+ * banco ante un contracargo.
+ */
+export type AutorizacionCobro = {
+  aceptadaEn: string;
+  texto: string;
+  cuotas: { numero: number; vence: string; monto: number }[];
+  ip?: string;
+  navegador?: string;
+};
+
 export type Consentimientos = {
   reembolso: boolean;
   datos: boolean;
@@ -89,6 +112,7 @@ export type Inscripcion = {
   cuotas: Cuota[];
   /** id de fuente de pago Wompi para cobros recurrentes */
   fuentePagoId?: number;
+  autorizacionCobro?: AutorizacionCobro;
   tarjetaResumen?: { marca: string; ultimos4: string };
   /** Bitácora visible para la organización. */
   eventos: { en: string; tipo: string; detalle: string }[];

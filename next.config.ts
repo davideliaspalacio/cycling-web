@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Fuera el indicador flotante de desarrollo: se cuela en las grabaciones.
+  devIndicators: false,
 };
 
 export default nextConfig;

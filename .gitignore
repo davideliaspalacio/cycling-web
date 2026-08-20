@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.datos/
+
+# Grabaciones de demo: pesan y se regeneran con scripts/grabar-demo.mjs
+videos-demo/*.mp4
+videos-demo/.crudo/

@@ -1,26 +1,232 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ============================================================
+   TIBET EPIC XCM — sistema visual "cartoon futurista de páramo"
+   Fondo: noche de páramo. Tarjetas: calcomanías con tinta gruesa.
+   Acentos: luces de bici (lima, magenta, naranja, cielo).
+   ============================================================ */
+
+@theme {
+  --color-noche: #06110e;
+  --color-selva: #0d2a24;
+  --color-musgo: #164036;
+  --color-tinta: #04100c;
+  --color-hueso: #f3fbef;
+  --color-lima: #cbff47;
+  --color-magenta: #ff4d91;
+  --color-naranja: #ff9a2e;
+  --color-cielo: #63e6ff;
+
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-race), ui-monospace, monospace;
+
+  --shadow-ink: 6px 6px 0 0 var(--color-tinta);
+  --shadow-ink-sm: 4px 4px 0 0 var(--color-tinta);
+  --shadow-ink-lg: 10px 10px 0 0 var(--color-tinta);
+  --shadow-glow: 0 0 0 3px var(--color-tinta), 0 0 34px -6px var(--color-lima);
+
+  --animate-drift: drift 26s linear infinite;
+  --animate-pulse-ring: pulse-ring 2.6s ease-out infinite;
+  --animate-rise: rise 0.6s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+  --animate-ticker: ticker 34s linear infinite;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+@keyframes drift {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 1200px -600px;
+  }
 }
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgb(203 255 71 / 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 18px rgb(203 255 71 / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(203 255 71 / 0);
+  }
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px) rotate(var(--rise-rot, 0deg));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(var(--rise-rot, 0deg));
+  }
+}
+@keyframes ticker {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+@keyframes dash {
+  to {
+    stroke-dashoffset: 0;
   }
 }
 
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-noche);
+  color: var(--color-hueso);
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv01";
+  overflow-x: hidden;
+}
+
+/* Textura de fondo: curvas de nivel + trama de puntos (papel de cómic) */
+.terreno::before {
+  content: "";
+  position: fixed;
+  inset: -20%;
+  z-index: -2;
+  pointer-events: none;
+  background-image:
+    radial-gradient(
+      circle at 18% 12%,
+      rgb(203 255 71 / 0.1),
+      transparent 42%
+    ),
+    radial-gradient(circle at 84% 8%, rgb(99 230 255 / 0.09), transparent 40%),
+    radial-gradient(circle at 62% 92%, rgb(255 77 145 / 0.08), transparent 45%);
+}
+
+.terreno::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: radial-gradient(
+    rgb(203 255 71 / 0.16) 1px,
+    transparent 1px
+  );
+  background-size: 26px 26px;
+  mask-image: radial-gradient(ellipse at 50% 0%, black 10%, transparent 78%);
+}
+
+/* --- Primitivas de tinta --- */
+.tinta {
+  border: 3px solid var(--color-tinta);
+  box-shadow: var(--shadow-ink);
+}
+.tinta-sm {
+  border: 3px solid var(--color-tinta);
+  box-shadow: var(--shadow-ink-sm);
+}
+
+.pulsable {
+  transition:
+    transform 0.16s cubic-bezier(0.2, 0.9, 0.25, 1),
+    box-shadow 0.16s cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+.pulsable:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 9px 9px 0 0 var(--color-tinta);
+}
+.pulsable:active {
+  transform: translate(3px, 3px);
+  box-shadow: 2px 2px 0 0 var(--color-tinta);
+}
+
+/* Foco visible siempre, sin excepción */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid var(--color-cielo);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* Campos de formulario */
+.campo {
+  width: 100%;
+  background: #fff;
+  color: var(--color-tinta);
+  border: 3px solid var(--color-tinta);
+  border-radius: 14px;
+  padding: 0.8rem 0.95rem;
+  font-size: 1rem;
+  font-family: var(--font-sans);
+  box-shadow: 3px 3px 0 0 var(--color-tinta);
+  transition:
+    box-shadow 0.14s ease,
+    transform 0.14s ease;
+}
+.campo::placeholder {
+  color: #7c8f80;
+}
+.campo:hover:not(:disabled) {
+  box-shadow: 5px 5px 0 0 var(--color-tinta);
+}
+.campo:focus {
+  outline: none;
+  transform: translate(-1px, -1px);
+  box-shadow:
+    5px 5px 0 0 var(--color-tinta),
+    0 0 0 3px var(--color-cielo);
+}
+.campo:disabled {
+  background: #dfe7dc;
+  box-shadow: none;
+}
+.campo[aria-invalid="true"] {
+  box-shadow:
+    3px 3px 0 0 var(--color-tinta),
+    0 0 0 3px var(--color-magenta);
+}
+select.campo {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%2304100c'%3E%3Cpath d='M5 7l5 6 5-6z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  background-size: 1.35rem;
+  padding-right: 2.6rem;
+}
+
+.raya-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Scrollbar en tono de la marca */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-noche);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-musgo);
+  border: 3px solid var(--color-noche);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-lima);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

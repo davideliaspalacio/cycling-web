@@ -1,198 +1,392 @@
 # Tibet Epic XCM — inscripciones y recaudo
 
-Plataforma de inscripción y cobro para el maratón de montaña Tibet Epic XCM 2027.
-Next.js 16 (App Router) · React 19 · Tailwind 4 · Wompi · Resend.
+Plataforma de inscripción y cobro para el maratón de montaña **Tibet Epic XCM 2027**.
+Permite inscribirse en cinco pasos y pagar de contado o en cuatro cuotas mensuales
+que se cobran solas.
+
+**Next.js 16** (App Router) · **React 19** · **Tailwind 4** · **Postgres** (Neon) ·
+**Wompi** (Bancolombia) · **Resend**
+
+---
+
+## Arranque
 
 ```bash
 pnpm install
-pnpm dev          # http://localhost:3000
-node scripts/sembrar-demo.mjs   # datos de ejemplo para la demo
+cp .env.example .env.local                        # y pega tus llaves
+node --env-file=.env.local scripts/migrar.mjs     # crea las tablas
+pnpm dev
+node scripts/sembrar-demo.mjs                     # datos de ejemplo
 ```
+
+Sin `DATABASE_URL` la app arranca igual, guardando en `.datos/`. Sirve para ver la
+demo; no para producción. Sin llaves de Wompi corre en modo simulación.
 
 ---
 
-## Lo primero: ¿Wompi cobra por cuotas?
+## Arquitectura
 
-Sí, pero no como uno esperaría. Hay que separar tres cosas que se llaman igual.
+```mermaid
+graph TD
+    subgraph nav["Navegador"]
+        F["Formulario · 5 pasos"]
+        M["Modal de Wompi<br/>captura la tarjeta"]
+        P["Portal del ciclista<br/>y ticket"]
+    end
 
-**1. `installments` en la API de Wompi — NO sirve para lo que queremos.**
-Cuando creas una transacción con tarjeta puedes mandar
-`payment_method: { installments: 12 }`. Eso son las **cuotas del banco emisor**:
-el banco le financia la compra al tarjetahabiente y **a nosotros nos consigna
-los $750.000 completos de una vez**. No hay recaudo mensual del lado del
-organizador, y el cupo del ciclista depende de su cupo de crédito.
+    subgraph app["Next.js · App Router"]
+        API["Rutas /api"]
+        SRV["lib/servicio.ts<br/>reglas de negocio"]
+        ALM["lib/almacen<br/>persistencia"]
+        WOM["lib/wompi.ts<br/>cliente de pagos"]
+        COR["lib/correos<br/>plantillas y envío"]
+    end
 
-**2. Wompi no tiene producto de suscripciones ni de planes recurrentes.**
-No existe un `/subscriptions` como en Stripe. Lo revisé en la documentación
-oficial: no está.
+    subgraph fuera["Servicios externos"]
+        WP["Wompi<br/>bóveda y cobros"]
+        RS["Resend · correo"]
+        PG["Postgres · Neon"]
+    end
 
-**3. Lo que Wompi sí da, y es lo que usamos: Fuentes de Pago.**
-[`docs.wompi.co/docs/colombia/fuentes-de-pago`](https://docs.wompi.co/en/docs/colombia/fuentes-de-pago/)
+    CRON["Cron diario<br/>8:00 Colombia"]
 
+    F -->|"datos de la inscripción"| API
+    M -->|"token de la tarjeta"| API
+    P -->|"consultas y adelantos"| API
+    API --> SRV
+    SRV --> ALM
+    SRV --> WOM
+    SRV --> COR
+    ALM --> PG
+    WOM -->|"cobra"| WP
+    COR -->|"envía"| RS
+    WP -.->|"webhook: resultado real"| API
+    CRON -->|"GET /api/cobros"| API
 ```
-POST /v1/tokens/cards        (llave pública)  → tok_...
-POST /v1/payment_sources     (llave privada)  → payment_source_id
-POST /v1/transactions        (llave privada)  → cobro contra ese id, cuando queramos
-     { payment_source_id, amount_in_cents, reference, recurrent: true }
+
+**La regla que sostiene todo:** nadie fuera de `lib/servicio.ts` decide sobre dinero,
+y nadie fuera de `lib/almacen` toca la persistencia.
+
+---
+
+## El flujo de inscripción
+
+Cinco pasos. La inscripción se crea en la base al salir de *Permisos*, antes de pagar,
+para que un pago fallido no obligue a llenar todo otra vez.
+
+```mermaid
+graph LR
+    A["KM 00<br/>Categoría"] --> B["KM 23<br/>Datos"]
+    B --> C["KM 46<br/>Tallas"]
+    C --> D["KM 69<br/>Permisos"]
+    D -->|"POST /api/inscripciones"| E["KM 92<br/>Pago"]
+    E --> T["Ticket"]
 ```
 
-La tarjeta queda guardada del lado de Wompi y nosotros cobramos cuando toque,
-sin volver a pedirle nada al ciclista. **El calendario, los reintentos, la mora
-y los correos son lógica nuestra** — eso es lo que está implementado en
-[`src/lib/servicio.ts`](src/lib/servicio.ts).
+El avance no se muestra como «paso 3 de 5» sino como el **perfil de altimetría de la
+carrera**: un ciclista de XCM sabe dónde está por el kilómetro y la pendiente.
 
-### El plan de recaudo que quedó montado
+---
 
-| | |
+## Pagos
+
+### Lo primero: Wompi no tiene cuotas
+
+Hay que separar tres cosas que se llaman igual:
+
+| | Qué es |
 |---|---|
-| Cuotas | 4 |
-| Reparto | $188.000 · $188.000 · $187.000 · $187.000 = **$750.000 exactos** |
-| Recargo | ninguno |
-| Cuota 1 | se cobra al inscribirse, y ahí queda reservado el cupo |
-| Cuotas 2–4 | día 5 de cada mes, automáticas |
-| Aviso previo | correo 3 días antes de cada cobro |
-| Si el banco rechaza | correo con el motivo + reintento a las 48 h, hasta 3 intentos |
-| Adelantar | el ciclista puede pagar la siguiente cuota cuando quiera desde su portal |
+| `payment_method.installments` | **Cuotas del banco emisor.** El banco financia al tarjetahabiente y al comercio le consignan todo de una. No sirve para recaudo mensual. |
+| Suscripciones | **No existen en Wompi.** |
+| **Fuentes de pago** | Lo que sí hay, y lo que usamos: Wompi guarda la tarjeta y nos da un `payment_source_id` para cobrar cuando queramos. |
 
-El reparto se calcula en `repartirEnCuotas()`: redondea al millar y mete el
-sobrante en las primeras cuotas, de modo que la suma **siempre** da el total.
-Nada de "4 × 188.000 = 752.000".
+**El calendario, los reintentos, la mora y los correos son lógica de esta app.** Wompi
+es el datáfono; nosotros decidimos a quién cobrarle, cuándo y qué hacer si el banco
+rechaza.
 
-### Limitaciones que hay que decirle al cliente
+### Pago de contado
 
-- **El plan de cuotas exige tarjeta.** PSE no se puede tokenizar para cobro
-  silencioso, y Nequi como fuente de pago necesita que el usuario apruebe en su
-  celular. Para quien no tenga tarjeta, la alternativa es mandarle un link de
-  pago por cuota (queda como siguiente paso).
-- **Antes de producción hay que mover la tokenización al navegador.** Hoy el
-  número de tarjeta pasa por nuestro servidor para tokenizarse
-  (`src/lib/wompi.ts`). Funciona, pero nos mete en un alcance PCI más pesado del
-  necesario. Con la llave pública se puede tokenizar desde el cliente y que al
-  servidor solo le llegue el `tok_`. Es un cambio de una tarde.
-- **`/panel` no tiene autenticación todavía.**
+```mermaid
+sequenceDiagram
+    participant C as Ciclista
+    participant A as App
+    participant W as Wompi
+
+    C->>A: Elige "todo de una"
+    A->>A: Calcula la firma de integridad<br/>(el secreto no sale del servidor)
+    A-->>C: Configuración del widget
+    C->>W: Abre el modal y paga
+    W-->>C: Devuelve id de transacción
+    C->>A: POST /api/pagos/confirmar
+    A->>W: GET /transactions/{id}
+    W-->>A: APPROVED
+    A->>A: Marca pagado y envía comprobante
+    W--)A: Webhook (fuente de verdad)
+```
+
+No le creemos al navegador: el modal nos da un id y **nosotros le preguntamos a Wompi**
+cuál es el estado real.
+
+### Activar el plan de cuotas
+
+El modal se abre en modo `tokenize`: **no cobra nada**, solo captura la tarjeta. El
+número nunca pasa por nuestro servidor.
+
+```mermaid
+sequenceDiagram
+    participant C as Ciclista
+    participant A as App
+    participant W as Wompi
+
+    C->>A: Elige "4 cuotas" y autoriza el cobro recurrente
+    C->>W: Modal en modo tokenize
+    W-->>A: POST /api/pagos/tokenizado (token de tarjeta)
+    A->>W: POST /payment_sources
+    W-->>A: payment_source_id
+    A->>A: Crea el calendario de 4 cuotas
+    A->>W: POST /transactions (cuota 1)
+    W-->>A: PENDING, luego APPROVED
+    A->>C: Correo con el calendario y la constancia
+```
+
+### Cobro mensual
+
+```mermaid
+sequenceDiagram
+    participant K as Cron (8:00)
+    participant A as App
+    participant W as Wompi
+    participant C as Ciclista
+
+    K->>A: GET /api/cobros
+    A->>A: Busca cuotas que vencen hoy
+    Note over A: Faltan 3 días, sale correo de aviso
+    A->>W: POST /transactions con payment_source_id
+    alt Aprobado
+        W-->>A: APPROVED
+        A->>C: Comprobante con el saldo restante
+    else Rechazado
+        W-->>A: DECLINED y el motivo
+        A->>C: Correo con el motivo y cómo resolverlo
+        Note over A: Reintenta a las 48 h, hasta 3 veces
+    end
+```
+
+### Estados de una cuota
+
+```mermaid
+stateDiagram-v2
+    [*] --> PENDIENTE: se crea el calendario
+    PENDIENTE --> EN_PROCESO: se reclama para cobrar
+    EN_PROCESO --> PAGADA: APPROVED
+    EN_PROCESO --> FALLIDA: DECLINED o ERROR
+    EN_PROCESO --> EN_PROCESO: sigue PENDING, lo cierra el webhook
+    FALLIDA --> EN_PROCESO: reintento a las 48 h
+    PAGADA --> [*]
+```
+
+**`EN_PROCESO` no es decorativo.** Wompi responde `PENDING` y liquida un par de segundos
+después; tratar ese `PENDING` como fallo hacía que reintentáramos un cobro que iba a
+aprobarse — y eso es cobrar dos veces. Una cuota sin liquidar nunca se reintenta.
+
+### Cómo se evita el cobro doble
+
+Tres capas independientes:
+
+1. **Reclamo atómico.** Tomar una cuota es un solo `UPDATE ... WHERE estado <> 'EN_PROCESO'`.
+   Si entran dos peticiones a la vez, la base deja pasar una y a la otra le devuelve cero filas.
+2. **Estado `EN_PROCESO`.** Un cobro cuyo resultado no conocemos no se relanza.
+3. **Referencia única por intento** (`TE27-XXXXXX-C2-1`). Wompi rechaza referencias repetidas.
 
 ---
 
-## Cómo está armado
+## Modelo de datos
+
+```mermaid
+erDiagram
+    INSCRIPCIONES ||--o{ CUOTAS : tiene
+    INSCRIPCIONES {
+        uuid id PK
+        text referencia UK
+        text estado
+        text categoria_codigo
+        jsonb ciclista
+        jsonb tallas
+        jsonb consentimientos
+        text plan
+        integer total
+        integer pagado
+        bigint fuente_pago_id
+        jsonb tarjeta_resumen
+        jsonb autorizacion_cobro
+        jsonb eventos
+    }
+    CUOTAS {
+        uuid inscripcion_id PK
+        integer numero PK
+        date vence
+        integer monto
+        text estado
+        text referencia
+        text transaccion_id
+        integer intentos
+        timestamptz ultimo_intento_en
+        text ultimo_error
+    }
+    CORREOS {
+        uuid id PK
+        text para
+        text asunto
+        text plantilla
+        text html
+        text referencia
+    }
+```
+
+- `estado` de la inscripción: `PENDIENTE_PAGO` · `AL_DIA` · `EN_MORA` · `COMPLETA`
+- `plan`: `CONTADO` · `CUOTAS`
+- `fuente_pago_id`: el id que Wompi da al guardar la tarjeta
+- `autorizacion_cobro`: constancia con texto, hora, IP y navegador
+
+**Por qué las cuotas son filas y el ciclista es `jsonb`:** las cuotas son el libro de
+dinero — se actualizan una por una, se consultan por vencimiento y llevan `CHECK` de
+monto positivo y estados válidos. Los datos del ciclista siempre se leen y escriben
+completos, así que como documento son más simples, con índices de expresión sobre
+documento y correo, que son los únicos campos por los que se busca.
+
+El dinero se guarda en **pesos enteros**: el COP no maneja centavos en la práctica.
+Wompi sí trabaja en centavos, y la conversión vive en un solo sitio (`aCentavos`).
+
+### El reparto de las cuotas
+
+`repartirEnCuotas()` redondea al millar y mete el sobrante en las primeras cuotas, de
+modo que la suma **siempre** da el total exacto:
+
+```
+750.000 → 188.000 · 188.000 · 187.000 · 187.000
+```
+
+Nada de «4 × 188.000 = 752.000».
+
+---
+
+## Correos
+
+Seis plantillas en `src/lib/correos/plantillas.ts`. HTML con tablas y estilos en línea a
+propósito: Gmail y Outlook descartan `<style>` externo, flexbox y fuentes web.
+
+| Plantilla | Cuándo sale |
+|---|---|
+| `inscripcion-confirmada` | Pago de contado aprobado |
+| `plan-cuotas-activado` | Primera cuota cobrada, con el calendario y la constancia |
+| `cuota-pagada` | Cada cobro mensual, con comprobante y saldo restante |
+| `recordatorio-cuota` | Tres días antes del cobro |
+| `cuota-fallida` | El banco rechazó, con el motivo y cómo resolverlo |
+| `inscripcion-saldada` | Última cuota pagada |
+
+Todo lo enviado queda en **`/correos`**, con vista previa del HTML real.
+
+### Para que no caigan en spam
+
+El proveedor no es lo que decide: lo que manda a spam es no tener el DNS en orden. En
+`tibetepic.com` hay que publicar **DKIM**, **SPF** (`v=spf1 include:amazonses.com ~all`)
+y **DMARC** (`v=DMARC1; p=none; rua=mailto:dmarc@tibetepic.com`, subiendo a `quarantine`
+cuando los reportes salgan limpios), y enviar desde un subdominio dedicado para que un
+problema de reputación no toque el correo corporativo.
+
+---
+
+## Autorización de cobro recurrente
+
+Las reglas de tarjeta archivada de Visa y Mastercard exigen que el tarjetahabiente
+autorice los cobros futuros **conociendo montos y fechas**, y que el comercio conserve
+constancia. Sin ella, un contracargo por «yo no autoricé eso» lo pierde el comercio.
+
+El texto lo **compone el servidor** a partir del mismo calendario con el que va a cobrar
+— si lo mandara el navegador, alguien podría alterar lo que «aceptó». Se guarda en
+`autorizacion_cobro` con hora, IP y navegador, va por escrito en el correo ya con la
+tarjeta real, y se puede consultar después desde el portal.
+
+---
+
+## Estructura
 
 ```
 src/
   app/
     page.tsx                    Landing
     inscripcion/                Formulario de 5 pasos
-    mi-inscripcion/             Portal del ciclista: saldo, cuotas, adelantar
-    ticket/[referencia]/        Ticket de inscripción: dorsal, QR, estado de pago
-    panel/                      Vista de la organización: recaudo, mora
-    correos/                    Bandeja de todo lo enviado, con vista previa
+    mi-inscripcion/             Portal: saldo, cuotas, adelantar, saldar
+    ticket/[referencia]/        Ticket con dorsal, QR y estado de pago
+    panel/                      Vista de la organización
+    correos/                    Bandeja de lo enviado, con vista previa
     api/
       inscripciones/            POST  crea la inscripción
-      pagos/                    POST  tokeniza, crea fuente de pago, cobra cuota 1
+      pagos/widget/             POST  configuración firmada del modal
+      pagos/tokenizado/         POST  recibe el token del modal, activa las cuotas
+      pagos/confirmar/          POST  verifica contra Wompi el pago del modal
       pagos/cuota/              POST  cobra una cuota puntual
-      mi-inscripcion/           POST  consulta por documento + correo
+      pagos/saldar/             POST  paga todo el saldo en un solo cobro
+      mi-inscripcion/           POST  consulta por documento y correo
       wompi/webhook/            POST  fuente de verdad de los pagos
       cobros/                   GET   barrido diario (cron)
   lib/
     catalogo.ts     Categorías, municipios, tallas, constantes del evento
     dinero.ts       Reparto de cuotas, calendario, formato COP
-    wompi.ts        Cliente de Wompi + firma de integridad + firma de webhooks
+    validacion.ts   Esquemas de zod, compartidos cliente y servidor
+    autorizacion.ts Texto de la autorización de cobro recurrente
+    wompi.ts        Cliente de Wompi, firmas de integridad y de webhooks
     servicio.ts     Reglas de negocio: cobrar, reintentar, disparar correos
-    almacen.ts      Persistencia (hoy JSON en disco — ver abajo)
-    correos/        Plantillas HTML + envío con Resend
+    db.ts           Pool de Postgres y helper de transacciones
+    esquema.sql     DDL idempotente
+    almacen/        postgres.ts | json.ts, elegidos en index.ts
+    correos/        Plantillas HTML y envío con Resend
   components/
-    perfil-de-etapa.tsx   El progreso del formulario como perfil de altimetría
+    perfil-de-etapa.tsx   El progreso del formulario como altimetría
+    formulario/           Pasos, modal de Wompi, cortina de procesamiento
 ```
-
-### Decisiones que tomé y por qué
-
-**Persistencia en archivo JSON, detrás de una interfaz.**
-`src/lib/almacen.ts` es la única pieza que toca el disco; toda la app habla con
-esas seis funciones. Cambiar a Postgres (Neon o Supabase) es reimplementarlas y
-nada más se entera. Lo dejé así para no bloquear la demo esperando credenciales
-de base de datos — **pero no aguanta producción**: no hay transacciones y no
-sobrevive a un despliegue en Vercel (sistema de archivos efímero). Es la primera
-tarea después de la reunión.
-
-**Modo simulación en Wompi y en Resend.**
-Sin llaves, la app no se cae: `WOMPI_MODO=simulacion` devuelve respuestas
-coherentes (la tarjeta `4242…` aprueba, la `4111…` rechaza, igual que el sandbox
-real) y los correos se renderizan y quedan en `/correos`. Cuando lleguen las
-llaves se cambia el `.env` y **no hay que tocar una sola línea de código**.
-
-**El webhook es la fuente de verdad.**
-El cobro por API nos da una respuesta inmediata, pero un pago por PSE o efectivo
-solo vuelve por webhook. `/api/wompi/webhook` valida la firma SHA-256 y es
-idempotente: si Wompi repite el evento, no se manda el correo dos veces.
-
-**El ticket lleva un QR de verdad.**
-`/ticket/<referencia>` genera el código con la librería `qrcode` del lado del
-servidor y apunta a la propia URL del ticket, así que en la entrega de kits se
-escanea y abre la inscripción con su estado de pago. El dorsal se deriva de la
-referencia con un hash estable: el mismo ciclista ve siempre el mismo número sin
-necesidad de un contador en base de datos.
-
-**El progreso del formulario es un perfil de altimetría.**
-Un ciclista de XCM lee la altimetría antes que nada; sabe dónde está por el
-kilómetro, no por un "paso 3 de 5". El avance del formulario **es** el perfil de
-la carrera, con el corredor subiendo hacia la meta.
 
 ---
 
-## Correos
+## Decisiones y por qué
 
-Seis plantillas, todas en `src/lib/correos/plantillas.ts`, HTML con tablas e
-estilos en línea porque Gmail y Outlook descartan `<style>`, flexbox y fuentes web.
+**Postgres detrás de una interfaz, con respaldo en archivo.** `src/lib/almacen/` es lo
+único que toca la persistencia. Con `DATABASE_URL` usa Postgres; sin ella cae al archivo
+JSON, para que cualquiera pueda clonar el repo y ver la demo sin montar una base. Lo que
+gana Postgres no es velocidad, es integridad: guardar una inscripción con sus cuotas es
+**una sola transacción**.
 
-| Plantilla | Cuándo sale |
-|---|---|
-| `inscripcion-confirmada` | pago de contado aprobado |
-| `plan-cuotas-activado` | primera cuota cobrada, con el calendario completo |
-| `cuota-pagada` | cada cobro mensual, con comprobante y saldo restante |
-| `recordatorio-cuota` | 3 días antes del cobro |
-| `cuota-fallida` | el banco rechazó, con el motivo y cómo resolverlo |
-| `inscripcion-saldada` | última cuota pagada |
+**Driver `pg` normal, no el HTTP de Neon.** La app corre en un contenedor de larga vida,
+no en funciones serverless, así que un pool clásico es más rápido y más simple.
 
-Todo lo enviado queda en **`/correos`**, con vista previa del HTML real.
+**El webhook es la fuente de verdad.** El cobro por API da respuesta inmediata, pero un
+pago por PSE o efectivo solo vuelve por webhook. `/api/wompi/webhook` valida la firma
+SHA-256 y es idempotente: si Wompi repite el evento, no se manda el correo dos veces.
 
-### Para que no caigan en spam
+**La tarjeta nunca pasa por nuestro servidor.** El modal de Wompi la captura y nos
+devuelve un token. Eso saca el número de tarjeta de nuestro alcance PCI.
 
-Resend por sí solo no basta. Hay que hacer esto en el DNS de `tibetepic.com`:
+**El ticket lleva un QR real.** Apunta a su propia URL, así que en la entrega de kits se
+escanea y abre la inscripción con su estado de pago. El dorsal sale de un hash estable de
+la referencia: el mismo ciclista ve siempre el mismo número sin contador en base de datos.
 
-1. Verificar el dominio en Resend (`Domains → Add Domain`).
-2. Publicar los registros que entrega: **DKIM** (`resend._domainkey`), **SPF**
-   (`v=spf1 include:amazonses.com ~all`) y el CNAME de return-path.
-3. Agregar **DMARC**: `_dmarc.tibetepic.com` → `v=DMARC1; p=none; rua=mailto:dmarc@tibetepic.com`
-   (arrancar en `p=none`, y subir a `quarantine` cuando los reportes salgan limpios).
-4. Enviar desde un subdominio dedicado (`inscripciones@tibetepic.com` o
-   `mail.tibetepic.com`) para que un problema de reputación no toque el correo
-   corporativo.
-
-Costo: Resend es gratis hasta 3.000 correos/mes y 100/día; el plan de US$20
-sube a 50.000/mes. Con 900 cupos y ~6 correos por ciclista, el plan pago cubre
-la temporada de sobra.
-
----
-
-## Demos en vídeo
-
-```bash
-node scripts/grabar-demo.mjs            # los tres
-node scripts/grabar-demo.mjs celular    # solo uno
-```
-
-Usa el Chrome instalado en el equipo (no descarga navegadores) y deja los `.mp4`
-en `videos-demo/`, con un `LEEME.md` que explica cada uno. Las grabaciones
-simulan a una persona: cursor visible, movimientos con curva, tecleo irregular y
-scroll con inercia — nada de saltos de robot. Requiere `ffmpeg`.
+**Cortina de procesamiento.** El cobro tarda varios segundos con la página quieta. Sin
+una señal visible, el ciclista cree que el botón no hizo nada y vuelve a darle — que es
+justo como se generan los cobros dobles.
 
 ---
 
 ## Variables de entorno
 
 ```bash
+# Base de datos (Neon o cualquier Postgres)
+DATABASE_URL="postgresql://usuario:clave@host/db?sslmode=verify-full"
+
 # Wompi — https://comercios.wompi.co
 WOMPI_MODO=sandbox                    # simulacion | sandbox | produccion
+WOMPI_URL_BASE=https://sandbox.wompi.co/v1
 NEXT_PUBLIC_WOMPI_LLAVE_PUBLICA=pub_test_...
-WOMPI_LLAVE_PRIVADA=prv_test_...
+WOMPI_LLAVE_PRIVADA=prv_test_...      # crea fuentes de pago y cobra
 WOMPI_SECRETO_INTEGRIDAD=test_integrity_...
 WOMPI_SECRETO_EVENTOS=test_events_...
 
@@ -206,18 +400,40 @@ URL_PUBLICA=https://inscripciones.tibetepic.com
 CRON_SECRETO=<cadena larga aleatoria>
 ```
 
-En el panel de Wompi hay que registrar el webhook apuntando a
-`https://<dominio>/api/wompi/webhook`.
+**Qué llave hace qué:** la pública abre el checkout y tokeniza (el titular está
+presente); la privada crea fuentes de pago y cobra (el titular **no** está presente).
+Por eso el cobro mensual necesita la privada y el contado no.
 
-El cobro mensual lo dispara el cron de Vercel (`vercel.json`), todos los días a
-las 8:00 de Colombia.
+El webhook se registra en el panel de Wompi apuntando a
+`https://<dominio>/api/wompi/webhook`. Para probarlo en local hace falta una URL pública:
+`ngrok http <puerto>`.
 
 ---
 
-## Lo que sigue
+## Scripts
 
-1. Base de datos real (Postgres) reemplazando `almacen.ts`.
-2. Tokenización de tarjeta en el navegador.
-3. Autenticación en `/panel`.
-4. Link de pago por cuota para quien no tenga tarjeta.
-5. Exportar inscritos a CSV para cronometraje y seguros.
+```bash
+node --env-file=.env.local scripts/migrar.mjs           # esquema e importación de la demo
+node --env-file=.env.local scripts/verificar-wompi.mjs  # prueba las llaves de punta a punta
+node scripts/sembrar-demo.mjs                           # inscripciones de ejemplo
+node scripts/grabar-demo.mjs                            # graba los vídeos de demo
+```
+
+`verificar-wompi.mjs` recorre el mismo camino que la app — aceptaciones, tokenizar,
+fuente de pago, cobro y consulta — y no imprime ninguna llave. Si eso pasa, el modal
+funciona.
+
+---
+
+## Pendientes antes de producción
+
+1. **Autenticación en `/panel`.** Hoy está abierto.
+2. **Política de mora.** Tras tres cobros rechazados la inscripción queda marcada, pero
+   no se libera el cupo. Es una decisión del cliente, no técnica.
+3. **Cambiar de tarjeta.** Los correos lo ofrecen y no existe la pantalla.
+4. **Recordatorio robusto.** Hoy solo sale si el cron corre exactamente tres días antes;
+   debería registrar «recordatorio enviado» y mandarlo en cualquier día que falten ≤ 3.
+5. **Alerta si el cron no corre.** Si el barrido falla el día 5, nadie se entera y se
+   pierde un mes de recaudo.
+6. **Rotar las llaves de sandbox** y poner las de producción solo como variables de
+   entorno del hosting.

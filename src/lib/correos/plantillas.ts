@@ -1,8 +1,16 @@
-import { EVENTO } from "../catalogo";
+import {
+  CUENTAS_RECAUDO,
+  EVENTO,
+  FECHA_LIMITE_ABONOS,
+  MAX_ABONOS,
+  NOMBRE_COMPLETO,
+  PRENDAS,
+  cuentaDeCanal,
+  recorridoDe,
+} from "../catalogo";
 import { fechaLarga, pesos, proximaCuota, saldoPendiente } from "../dinero";
-import type { Inscripcion } from "../tipos";
+import type { Abono, DatosCiclista, Inscripcion } from "../tipos";
 import { categoriaPorCodigo } from "../catalogo";
-import { textoDeAutorizacionConfirmado } from "../autorizacion";
 
 /**
  * Plantillas HTML para correo. Tablas e inline styles a propósito:
@@ -10,13 +18,19 @@ import { textoDeAutorizacionConfirmado } from "../autorizacion";
  * El diseño imita la marca con lo que sí sobrevive: color, peso y bloques.
  */
 
-const TINTA = "#04100c";
-const NOCHE = "#06110e";
-const LIMA = "#cbff47";
-const HUESO = "#f3fbef";
-const MAGENTA = "#ff4d91";
-const NARANJA = "#ff9a2e";
-const GRIS = "#5d6f63";
+const TINTA = "#08213a";
+const BRUMA = "#dfeefc";
+const NUBE = "#ffffff";
+const MAREA = "#b8dcf7";
+const RIO = "#0b4f8f";
+const TURQUESA = "#2fd2ef";
+const SOL = "#ffb02e";
+const ALERTA = "#c81e3c";
+/** El rojo de error como relleno, para que la tinta encima siga leyéndose. */
+const ALERTA_SUAVE = "#ffdde2";
+const GRIS = "#4f6578";
+const VERDE = "#2f7d32";
+const LINEA = "#d6e4f1";
 
 const FUENTE =
   "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif";
@@ -28,7 +42,7 @@ export type PlantillaCorreo = {
   texto: string;
 };
 
-function boton(texto: string, url: string, color = LIMA): string {
+function boton(texto: string, url: string, color = TURQUESA): string {
   return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0"><tr><td style="background:${color};border:3px solid ${TINTA};border-radius:14px">
     <a href="${url}" style="display:inline-block;padding:14px 26px;font-family:${FUENTE};font-size:16px;font-weight:800;color:${TINTA};text-decoration:none;letter-spacing:-0.01em">${texto}</a>
   </td></tr></table>`;
@@ -36,9 +50,9 @@ function boton(texto: string, url: string, color = LIMA): string {
 
 function barraProgreso(pagado: number, total: number): string {
   const pct = Math.max(2, Math.min(100, Math.round((pagado / total) * 100)));
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:3px solid ${TINTA};border-radius:99px;background:#e4ecdf;margin:6px 0 14px">
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:3px solid ${TINTA};border-radius:99px;background:#dbe9f7;margin:6px 0 14px">
     <tr>
-      <td width="${pct}%" style="background:${LIMA};height:18px;border-radius:99px;font-size:0;line-height:0">&nbsp;</td>
+      <td width="${pct}%" style="background:${TURQUESA};height:18px;border-radius:99px;font-size:0;line-height:0">&nbsp;</td>
       <td style="font-size:0;line-height:0">&nbsp;</td>
     </tr>
   </table>
@@ -47,8 +61,8 @@ function barraProgreso(pagado: number, total: number): string {
 
 function filaDato(etiqueta: string, valor: string, resaltar = false): string {
   return `<tr>
-    <td style="padding:9px 0;border-bottom:1px solid #dfe7dc;font-family:${FUENTE};font-size:14px;color:${GRIS}">${etiqueta}</td>
-    <td align="right" style="padding:9px 0;border-bottom:1px solid #dfe7dc;font-family:${resaltar ? MONO : FUENTE};font-size:${resaltar ? "16px" : "14px"};font-weight:700;color:${TINTA}">${valor}</td>
+    <td style="padding:9px 0;border-bottom:1px solid ${LINEA};font-family:${FUENTE};font-size:14px;color:${GRIS}">${etiqueta}</td>
+    <td align="right" style="padding:9px 0;border-bottom:1px solid ${LINEA};font-family:${resaltar ? MONO : FUENTE};font-size:${resaltar ? "16px" : "14px"};font-weight:700;color:${TINTA}">${valor}</td>
   </tr>`;
 }
 
@@ -57,9 +71,9 @@ function tablaCuotas(ins: Inscripcion): string {
     .map((c) => {
       const color =
         c.estado === "PAGADA"
-          ? "#2f7d32"
+          ? VERDE
           : c.estado === "VENCIDA" || c.estado === "FALLIDA"
-            ? MAGENTA
+            ? ALERTA
             : GRIS;
       const etiqueta =
         c.estado === "PAGADA"
@@ -72,10 +86,10 @@ function tablaCuotas(ins: Inscripcion): string {
                 ? "Rechazada"
                 : "Programada";
       return `<tr>
-        <td style="padding:11px 0;border-bottom:1px solid #dfe7dc;font-family:${MONO};font-size:14px;font-weight:700;color:${TINTA}">Cuota ${c.numero}/${ins.cuotas.length}</td>
-        <td style="padding:11px 0;border-bottom:1px solid #dfe7dc;font-family:${FUENTE};font-size:13px;color:${GRIS}">${fechaLarga(c.vence)}</td>
-        <td align="right" style="padding:11px 0;border-bottom:1px solid #dfe7dc;font-family:${MONO};font-size:14px;font-weight:700;color:${TINTA}">${pesos(c.monto)}</td>
-        <td align="right" style="padding:11px 0 11px 12px;border-bottom:1px solid #dfe7dc;font-family:${FUENTE};font-size:12px;font-weight:700;color:${color}">${etiqueta}</td>
+        <td style="padding:11px 0;border-bottom:1px solid ${LINEA};font-family:${MONO};font-size:14px;font-weight:700;color:${TINTA}">Cuota ${c.numero}/${ins.cuotas.length}</td>
+        <td style="padding:11px 0;border-bottom:1px solid ${LINEA};font-family:${FUENTE};font-size:13px;color:${GRIS}">${fechaLarga(c.vence)}</td>
+        <td align="right" style="padding:11px 0;border-bottom:1px solid ${LINEA};font-family:${MONO};font-size:14px;font-weight:700;color:${TINTA}">${pesos(c.monto)}</td>
+        <td align="right" style="padding:11px 0 11px 12px;border-bottom:1px solid ${LINEA};font-family:${FUENTE};font-size:12px;font-weight:700;color:${color}">${etiqueta}</td>
       </tr>`;
     })
     .join("");
@@ -90,13 +104,13 @@ function envoltura(opciones: {
   ins: Inscripcion;
 }): string {
   const { eyebrow, titulo, cuerpo, ins } = opciones;
-  const colorEyebrow = opciones.colorEyebrow ?? LIMA;
+  const colorEyebrow = opciones.colorEyebrow ?? TURQUESA;
   return `<!doctype html>
 <html lang="es">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${titulo}</title></head>
-<body style="margin:0;padding:0;background:${NOCHE}">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${NOCHE};padding:28px 14px">
+<body style="margin:0;padding:0;background:${BRUMA}">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${BRUMA};padding:28px 14px">
   <tr><td align="center">
     <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:100%">
 
@@ -104,10 +118,11 @@ function envoltura(opciones: {
       <tr><td style="padding:0 0 18px">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
           <tr>
-            <td style="font-family:${FUENTE};font-size:19px;font-weight:800;color:${HUESO};letter-spacing:-0.03em">
-              TIBET&nbsp;EPIC<span style="color:${LIMA}"> XCM</span>
+            <td style="font-family:${FUENTE};font-size:19px;font-weight:800;color:${TINTA};letter-spacing:-0.03em">
+              ${EVENTO.wordmark.inicio}&nbsp;<span style="color:${RIO}">${EVENTO.wordmark.acento}</span>
+              <span style="font-family:${MONO};font-size:12px;color:${GRIS}"> ${EVENTO.wordmark.sufijo}</span>
             </td>
-            <td align="right" style="font-family:${MONO};font-size:12px;color:#7f9184;letter-spacing:0.06em">
+            <td align="right" style="font-family:${MONO};font-size:12px;color:${GRIS};letter-spacing:0.06em">
               ${EVENTO.fechaLegible.toUpperCase()}
             </td>
           </tr>
@@ -115,7 +130,7 @@ function envoltura(opciones: {
       </td></tr>
 
       <!-- Tarjeta -->
-      <tr><td style="background:${HUESO};border:3px solid ${TINTA};border-radius:22px;padding:32px 30px">
+      <tr><td style="background:${NUBE};border:3px solid ${TINTA};border-radius:22px;padding:32px 30px">
         <p style="margin:0 0 10px;font-family:${MONO};font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:${TINTA};background:${colorEyebrow};display:inline-block;padding:5px 11px;border-radius:99px;border:2px solid ${TINTA}">${eyebrow}</p>
         <h1 style="margin:8px 0 16px;font-family:${FUENTE};font-size:30px;line-height:1.12;font-weight:800;letter-spacing:-0.035em;color:${TINTA}">${titulo}</h1>
         ${cuerpo}
@@ -123,13 +138,13 @@ function envoltura(opciones: {
 
       <!-- Pie -->
       <tr><td style="padding:22px 6px 0">
-        <p style="margin:0 0 8px;font-family:${MONO};font-size:12px;color:#7f9184">
-          Referencia <span style="color:${LIMA};font-weight:700">${ins.referencia}</span> · ${ins.ciclista.nombres} ${ins.ciclista.apellidos}
+        <p style="margin:0 0 8px;font-family:${MONO};font-size:12px;color:${GRIS}">
+          Referencia <span style="color:${RIO};font-weight:700">${ins.referencia}</span> · ${ins.ciclista.nombres} ${ins.ciclista.apellidos}
         </p>
-        <p style="margin:0;font-family:${FUENTE};font-size:12px;line-height:1.6;color:#67796c">
-          ${EVENTO.nombre} ${EVENTO.edicion} · ${EVENTO.lugar}<br>
+        <p style="margin:0;font-family:${FUENTE};font-size:12px;line-height:1.6;color:${GRIS}">
+          ${NOMBRE_COMPLETO} · ${EVENTO.lugar}<br>
           ¿Dudas con tu inscripción? Escríbenos a
-          <a href="mailto:${EVENTO.correoContacto}" style="color:${LIMA};text-decoration:none">${EVENTO.correoContacto}</a>
+          <a href="mailto:${EVENTO.correoContacto}" style="color:${RIO};text-decoration:none">${EVENTO.correoContacto}</a>
         </p>
       </td></tr>
 
@@ -140,11 +155,51 @@ function envoltura(opciones: {
 }
 
 function parrafo(texto: string): string {
-  return `<p style="margin:0 0 16px;font-family:${FUENTE};font-size:15px;line-height:1.62;color:#33453a">${texto}</p>`;
+  return `<p style="margin:0 0 16px;font-family:${FUENTE};font-size:15px;line-height:1.62;color:#2b4257">${texto}</p>`;
 }
 
 function nombreCorto(ins: Inscripcion): string {
   return ins.ciclista.nombres.split(" ")[0];
+}
+
+/**
+ * A dónde transfiere el ciclista.
+ *
+ * Va dentro del correo y no como enlace: quien está por transferir tiene la
+ * app del banco abierta, no el navegador, y buscar la página otra vez es
+ * justo donde se abandona el pago.
+ */
+function tablaCuentas(): string {
+  const filas = CUENTAS_RECAUDO.map(
+    (c) => `<tr>
+      <td style="padding:9px 0;border-bottom:1px solid ${LINEA};font-family:${FUENTE};font-size:14px;color:${GRIS}">${c.entidad}<span style="display:block;font-size:12px;color:${GRIS}">${c.tipo}</span></td>
+      <td align="right" style="padding:9px 0;border-bottom:1px solid ${LINEA};font-family:${MONO};font-size:16px;font-weight:700;color:${TINTA}">${c.numero}</td>
+    </tr>`,
+  ).join("");
+  return `<div style="margin:22px 0 6px;padding:16px 18px;background:#eaf3fc;border-radius:14px">
+    <p style="margin:0 0 4px;font-family:${MONO};font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:${GRIS}">Dónde transferir</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${filas}</table>
+    <p style="margin:10px 0 0;font-family:${FUENTE};font-size:12px;line-height:1.55;color:${GRIS}">
+      Todas las cuentas están a nombre de <strong>${CUENTAS_RECAUDO[0].titular}</strong>.
+      Guarda el comprobante: lo vas a necesitar para subirlo.
+    </p>
+  </div>`;
+}
+
+/** El plazo de recepción, dicho igual en todos los correos. */
+function avisoDeCierre(): string {
+  return parrafo(
+    `Recibimos comprobantes hasta el <strong>${fechaLarga(FECHA_LIMITE_ABONOS)}</strong>. Después de esa fecha no podemos recibir más abonos.`,
+  );
+}
+
+/** Cuadro de motivo, para lo que el ciclista tiene que leer sí o sí. */
+function recuadroMotivo(titulo: string, texto: string): string {
+  return `<p style="margin:0 0 16px;padding:12px 14px;background:${ALERTA_SUAVE};border:2px solid ${ALERTA};border-radius:12px;font-family:${FUENTE};font-size:14px;line-height:1.55;color:${TINTA}"><strong>${titulo}:</strong> ${texto}</p>`;
+}
+
+function nombreDeCanal(abono: Abono): string {
+  return cuentaDeCanal(abono.canal)?.entidad ?? abono.canal;
 }
 
 function urlPortal(ins: Inscripcion): string {
@@ -156,15 +211,16 @@ function urlPortal(ins: Inscripcion): string {
 
 export function inscripcionConfirmada(ins: Inscripcion): PlantillaCorreo {
   const cat = categoriaPorCodigo(ins.categoriaCodigo);
+  const recorrido = recorridoDe(cat);
   const cuerpo =
     parrafo(
       `${nombreCorto(ins)}, tu cupo está asegurado. Recibimos el pago completo y ya apareces en la lista de largada de <strong>${cat?.nombre}</strong>.`,
     ) +
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:22px 0 6px">
       ${filaDato("Categoría", cat?.nombre ?? ins.categoriaCodigo)}
-      ${filaDato("Recorrido", `${cat?.km ?? 0} km · ${cat?.desnivel ?? 0} m D+`)}
+      ${recorrido ? filaDato("Recorrido", recorrido) : ""}
       ${filaDato("Fecha de carrera", EVENTO.fechaLegible)}
-      ${filaDato("Jersey / camiseta", `${ins.tallas.jersey} / ${ins.tallas.running}`)}
+      ${PRENDAS.map((p) => filaDato(p.nombre, ins.tallas[p.campo])).join("")}
       ${filaDato("Total pagado", pesos(ins.total), true)}
     </table>` +
     boton("Ver mi inscripción", urlPortal(ins)) +
@@ -172,14 +228,14 @@ export function inscripcionConfirmada(ins: Inscripcion): PlantillaCorreo {
       `Guarda esta referencia: la vas a necesitar para retirar tu kit el día previo a la carrera.`,
     );
   return {
-    asunto: `Estás dentro — ${cat?.nombre} · Tibet Epic XCM 2027`,
+    asunto: `Estás dentro — ${cat?.nombre} · ${NOMBRE_COMPLETO}`,
     html: envoltura({
       eyebrow: "Inscripción confirmada",
       titulo: "Tu cupo quedó asegurado.",
       cuerpo,
       ins,
     }),
-    texto: `${nombreCorto(ins)}, tu inscripción al Tibet Epic XCM 2027 quedó confirmada. Categoría ${cat?.nombre}. Total pagado ${pesos(ins.total)}. Referencia ${ins.referencia}.`,
+    texto: `${nombreCorto(ins)}, tu inscripción al ${NOMBRE_COMPLETO} quedó confirmada. Categoría ${cat?.nombre}. Total pagado ${pesos(ins.total)}. Referencia ${ins.referencia}.`,
   };
 }
 
@@ -188,42 +244,31 @@ export function planCuotasActivado(ins: Inscripcion): PlantillaCorreo {
   const siguiente = proximaCuota(ins.cuotas);
   const cuerpo =
     parrafo(
-      `${nombreCorto(ins)}, tu cupo en <strong>${cat?.nombre}</strong> ya está reservado. Cobramos la primera de ${ins.cuotas.length} cuotas y las demás salen solas de tu tarjeta ${ins.tarjetaResumen?.marca ?? ""} •••• ${ins.tarjetaResumen?.ultimos4 ?? ""}.`,
+      `${nombreCorto(ins)}, tu cupo en <strong>${cat?.nombre}</strong> ya está reservado. Puedes pagarlo hasta en ${MAX_ABONOS} abonos: transfieres cuando puedas y subes el comprobante de cada uno.`,
     ) +
     barraProgreso(ins.pagado, ins.total) +
     tablaCuotas(ins) +
     (siguiente
       ? parrafo(
-          `<strong>La próxima cuota, ${pesos(siguiente.monto)}, se cobra el ${fechaLarga(siguiente.vence)}.</strong> Te avisamos tres días antes.`,
+          `<strong>El plan sugerido es de ${pesos(siguiente.monto)} hacia el ${fechaLarga(siguiente.vence)}</strong>, pero los montos y las fechas los pones tú: lo único que manda es que el total quede cubierto antes del cierre.`,
         )
       : "") +
-    boton("Ver mi plan de pagos", urlPortal(ins)) +
+    tablaCuentas() +
+    boton("Subir mi comprobante", urlPortal(ins)) +
     parrafo(
-      `Puedes adelantar cuotas cuando quieras desde tu inscripción, sin costo adicional.`,
+      `Un abono cuenta cuando lo verificamos, no cuando lo transfieres: revisamos cada comprobante a mano y te avisamos por correo.`,
     ) +
-    // Constancia escrita de la autorización: es lo que pide el banco si algún
-    // día se desconoce un cobro.
-    `<div style="margin:24px 0 0;padding:14px 16px;background:#eef4ea;border-radius:12px">
-      <p style="margin:0 0 6px;font-family:${MONO};font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:${GRIS}">Autorización de cobro</p>
-      <p style="margin:0;font-family:${FUENTE};font-size:13px;line-height:1.55;color:#33453a">
-        ${textoDeAutorizacionConfirmado(ins.cuotas, ins.tarjetaResumen)}
-      </p>
-      ${
-        ins.autorizacionCobro
-          ? `<p style="margin:8px 0 0;font-family:${MONO};font-size:11px;color:${GRIS}">Aceptada el ${new Date(ins.autorizacionCobro.aceptadaEn).toLocaleString("es-CO")}</p>`
-          : ""
-      }
-    </div>`;
+    avisoDeCierre();
   return {
-    asunto: `Plan de 4 cuotas activo — cupo reservado en ${cat?.nombre}`,
+    asunto: `Cupo reservado — págalo hasta en ${MAX_ABONOS} abonos · ${cat?.nombre}`,
     html: envoltura({
-      eyebrow: "Plan de cuotas activo",
-      titulo: "Cupo reservado. Vas 1 de 4.",
-      colorEyebrow: NARANJA,
+      eyebrow: "Pago por abonos",
+      titulo: `Cupo reservado. Vas por ${pesos(ins.pagado)} de ${pesos(ins.total)}.`,
+      colorEyebrow: SOL,
       cuerpo,
       ins,
     }),
-    texto: `${nombreCorto(ins)}, activaste el plan de ${ins.cuotas.length} cuotas. Llevas ${pesos(ins.pagado)} de ${pesos(ins.total)}. Próxima cuota: ${siguiente ? `${pesos(siguiente.monto)} el ${fechaLarga(siguiente.vence)}` : "—"}.`,
+    texto: `${nombreCorto(ins)}, tu cupo quedó reservado y puedes pagarlo hasta en ${MAX_ABONOS} abonos. Llevas ${pesos(ins.pagado)} de ${pesos(ins.total)}. Transfiere y sube el comprobante desde ${urlPortal(ins)}.`,
   };
 }
 
@@ -233,32 +278,38 @@ export function cuotaPagada(ins: Inscripcion, numero: number): PlantillaCorreo {
   const saldo = saldoPendiente(ins.cuotas);
   const cuerpo =
     parrafo(
-      `Cobramos ${pesos(cuota.monto)} a tu tarjeta •••• ${ins.tarjetaResumen?.ultimos4 ?? ""}. Van ${numero} de ${ins.cuotas.length}.`,
+      `Confirmamos ${pesos(cuota.monto)} de tu inscripción. Van ${numero} de ${ins.cuotas.length} pagos del plan.`,
     ) +
     barraProgreso(ins.pagado, ins.total) +
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:18px 0 6px">
-      ${filaDato("Cuota cobrada", `#${numero} de ${ins.cuotas.length}`)}
-      ${filaDato("Comprobante Wompi", cuota.transaccionId ?? "—")}
+      ${filaDato("Pago confirmado", `#${numero} de ${ins.cuotas.length}`)}
       ${filaDato("Te falta", pesos(saldo), true)}
     </table>` +
     (siguiente
       ? parrafo(
-          `Siguiente cobro: <strong>${pesos(siguiente.monto)} el ${fechaLarga(siguiente.vence)}</strong>.`,
-        )
+          `Siguiente pago sugerido: <strong>${pesos(siguiente.monto)} hacia el ${fechaLarga(siguiente.vence)}</strong>. Transfieres tú y subes el comprobante.`,
+        ) + tablaCuentas()
       : "") +
     boton("Ver el detalle", urlPortal(ins));
   return {
-    asunto: `Cuota ${numero} de ${ins.cuotas.length} pagada — te faltan ${pesos(saldo)}`,
+    asunto: `Pago ${numero} de ${ins.cuotas.length} confirmado — te faltan ${pesos(saldo)}`,
     html: envoltura({
-      eyebrow: `Cuota ${numero}/${ins.cuotas.length}`,
+      eyebrow: `Pago ${numero}/${ins.cuotas.length}`,
       titulo: `Recibimos ${pesos(cuota.monto)}.`,
       cuerpo,
       ins,
     }),
-    texto: `Cuota ${numero} de ${ins.cuotas.length} pagada (${pesos(cuota.monto)}). Saldo pendiente: ${pesos(saldo)}.`,
+    texto: `Pago ${numero} de ${ins.cuotas.length} confirmado (${pesos(cuota.monto)}). Saldo pendiente: ${pesos(saldo)}.`,
   };
 }
 
+/**
+ * El correo que más cambia con el pago manual.
+ *
+ * Con tarjeta decía "no tienes que hacer nada". Ahora es exactamente al revés:
+ * nadie cobra solo, así que si el ciclista no transfiere, no pasa nada — y se
+ * queda sin cupo. El texto tiene que pedir la acción sin ambigüedad.
+ */
 export function recordatorioCuota(
   ins: Inscripcion,
   numero: number,
@@ -268,53 +319,80 @@ export function recordatorioCuota(
   const cuando = dias === 0 ? "hoy" : dias === 1 ? "mañana" : `en ${dias} días`;
   const cuerpo =
     parrafo(
-      `${nombreCorto(ins)}, ${cuando} cobramos la cuota ${numero} de ${ins.cuotas.length} — <strong>${pesos(cuota.monto)}</strong> — a tu tarjeta ${ins.tarjetaResumen?.marca ?? ""} •••• ${ins.tarjetaResumen?.ultimos4 ?? ""}. No tienes que hacer nada; esto es solo para que no te tome por sorpresa.`,
+      `${nombreCorto(ins)}, te toca abonar <strong>${pesos(cuota.monto)}</strong> ${cuando}. <strong>Este pago no sale solo:</strong> tienes que transferir a una de nuestras cuentas y subir el comprobante para que cuente.`,
     ) +
     barraProgreso(ins.pagado, ins.total) +
+    tablaCuentas() +
+    boton("Subir mi comprobante", urlPortal(ins), TURQUESA) +
     parrafo(
-      `Si cambiaste de tarjeta o prefieres pagar el saldo completo, hazlo desde tu inscripción antes del ${fechaLarga(cuota.vence)}.`,
+      `Puedes abonar más o menos de lo sugerido: lo que importa es que el total quede cubierto. Si ya transferiste y subiste el comprobante, ignora este correo — puede que aún lo estemos revisando.`,
     ) +
-    boton("Actualizar o pagar ahora", urlPortal(ins), "#ffffff");
+    avisoDeCierre();
   return {
-    asunto: `Cobramos ${pesos(cuota.monto)} ${cuando} — cuota ${numero}/${ins.cuotas.length}`,
+    asunto: `Te toca abonar ${pesos(cuota.monto)} ${cuando} — hay que transferir`,
     html: envoltura({
-      eyebrow: `Cobro ${cuando}`,
-      titulo: `Cuota ${numero} de ${ins.cuotas.length}: ${pesos(cuota.monto)}.`,
-      colorEyebrow: "#63e6ff",
+      eyebrow: `Abono ${cuando}`,
+      titulo: `Te toca transferir ${pesos(cuota.monto)}.`,
+      colorEyebrow: MAREA,
       cuerpo,
       ins,
     }),
-    texto: `Recordatorio: cobramos ${pesos(cuota.monto)} ${cuando} (cuota ${numero}/${ins.cuotas.length}).`,
+    texto: `Recordatorio: te toca abonar ${pesos(cuota.monto)} ${cuando}. Nadie cobra automáticamente: transfiere y sube el comprobante en ${urlPortal(ins)}.`,
   };
 }
 
-export function cuotaFallida(ins: Inscripcion, numero: number): PlantillaCorreo {
-  const cuota = ins.cuotas.find((c) => c.numero === numero)!;
+/**
+ * Rechazo de un comprobante. Reemplaza al viejo "cobro rechazado" de tarjeta.
+ *
+ * Lo único que le importa al ciclista es qué salió mal y qué hacer ahora, así
+ * que el motivo va en un recuadro y no diluido en un párrafo. El rechazo no
+ * gasta ninguno de sus abonos y no le quita el cupo
+ * (docs/decisiones-pago-manual.md §7): decirlo evita el correo de pánico.
+ */
+export function evidenciaRechazada(
+  ins: Inscripcion,
+  datos: { motivo: string; monto: number; saldo: number },
+): PlantillaCorreo {
   const cuerpo =
     parrafo(
-      `El banco rechazó el cobro de <strong>${pesos(cuota.monto)}</strong> a tu tarjeta •••• ${ins.tarjetaResumen?.ultimos4 ?? ""}. Tu cupo sigue reservado y lo reintentamos automáticamente en 48 horas.`,
+      `${nombreCorto(ins)}, revisamos el comprobante que subiste por <strong>${pesos(datos.monto)}</strong> y no lo pudimos dar por bueno. <strong>Tu cupo sigue reservado</strong> y este intento no gasta ninguno de tus ${MAX_ABONOS} abonos.`,
     ) +
-    (cuota.ultimoError
-      ? `<p style="margin:0 0 16px;padding:12px 14px;background:#ffe9f1;border:2px solid ${MAGENTA};border-radius:12px;font-family:${FUENTE};font-size:14px;color:${TINTA}"><strong>Motivo del banco:</strong> ${cuota.ultimoError}</p>`
-      : "") +
+    recuadroMotivo("Por qué lo rechazamos", datos.motivo) +
     parrafo(
-      `Para resolverlo ahora: paga esta cuota con otra tarjeta o con PSE desde tu inscripción.`,
+      `<strong>Cómo lo arreglas:</strong> corrige lo que dice el motivo y vuelve a subir el comprobante desde tu inscripción. Si el problema es que la imagen no se lee, sirve la captura del detalle de la transferencia en la app del banco, o el PDF que te llega por correo.`,
     ) +
-    boton("Pagar con otro medio", urlPortal(ins), MAGENTA) +
-    parrafo(
-      `Después de tres intentos fallidos liberamos el cupo, así que mejor no lo dejes para el final.`,
-    );
+    boton("Volver a subir el comprobante", urlPortal(ins), ALERTA_SUAVE) +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:6px 0 6px">
+      ${filaDato("Total de tu inscripción", pesos(ins.total))}
+      ${filaDato("Te falta", pesos(datos.saldo), true)}
+    </table>` +
+    avisoDeCierre();
   return {
-    asunto: `No pudimos cobrar la cuota ${numero} — tu cupo sigue reservado`,
+    asunto: `No pudimos verificar tu comprobante — tu cupo sigue reservado`,
     html: envoltura({
-      eyebrow: "Cobro rechazado",
-      titulo: "El banco rechazó el cobro.",
-      colorEyebrow: MAGENTA,
+      eyebrow: "Comprobante rechazado",
+      titulo: "No pudimos verificar tu pago.",
+      colorEyebrow: ALERTA_SUAVE,
       cuerpo,
       ins,
     }),
-    texto: `No pudimos cobrar la cuota ${numero} (${pesos(cuota.monto)}). Reintentamos en 48 horas o puedes pagar con otro medio.`,
+    texto: `Rechazamos el comprobante de ${pesos(datos.monto)}. Motivo: ${datos.motivo}. Tu cupo sigue reservado; vuelve a subirlo en ${urlPortal(ins)}.`,
   };
+}
+
+/**
+ * Camino Wompi, en retirada. Se mantiene solo para que las llamadas de la
+ * pasarela sigan compilando mientras se desmonta; el motivo que muestra es el
+ * que devolvió el banco. Bajo pago manual el que se usa es
+ * `evidenciaRechazada` directamente.
+ */
+export function cuotaFallida(ins: Inscripcion, numero: number): PlantillaCorreo {
+  const cuota = ins.cuotas.find((c) => c.numero === numero);
+  return evidenciaRechazada(ins, {
+    motivo: cuota?.ultimoError ?? "No pudimos confirmar el pago.",
+    monto: cuota?.monto ?? ins.total,
+    saldo: saldoPendiente(ins.cuotas),
+  });
 }
 
 export function inscripcionSaldada(ins: Inscripcion): PlantillaCorreo {
@@ -326,7 +404,7 @@ export function inscripcionSaldada(ins: Inscripcion): PlantillaCorreo {
     barraProgreso(ins.total, ins.total) +
     tablaCuotas(ins) +
     parrafo(
-      `Nos vemos en la línea de largada el ${EVENTO.fechaLegible} en ${EVENTO.lugar}. Te escribiremos en marzo con la entrega de kits y la charla técnica.`,
+      `Nos vemos en la línea de largada el ${EVENTO.fechaLegible} en ${EVENTO.lugar}. Te escribiremos con la entrega de kits y la charla técnica.`,
     ) +
     boton("Ver mi inscripción", urlPortal(ins));
   return {
@@ -341,8 +419,221 @@ export function inscripcionSaldada(ins: Inscripcion): PlantillaCorreo {
   };
 }
 
+/* --------------------------- Pago manual por transferencia ----------------- */
+
+/**
+ * Acuse de recibo del comprobante.
+ *
+ * Su único trabajo es dejar clarísima una cosa: recibido no es verificado. Sin
+ * este correo el ciclista asume que ya pagó, y si después se rechaza, el
+ * rechazo llega como una sorpresa desagradable.
+ */
+export function evidenciaRecibida(
+  ins: Inscripcion,
+  abono: Abono,
+  datos: { verificado: number; saldo: number },
+): PlantillaCorreo {
+  const cuerpo =
+    parrafo(
+      `${nombreCorto(ins)}, recibimos tu comprobante de <strong>${pesos(abono.montoDeclarado)}</strong> por ${nombreDeCanal(abono)}. Lo revisa una persona del equipo contra el extracto, así que <strong>todavía no cuenta como pagado</strong>: te escribimos apenas quede verificado.`,
+    ) +
+    barraProgreso(datos.verificado, ins.total) +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:18px 0 6px">
+      ${filaDato("Comprobante", `${abono.numero} de ${MAX_ABONOS}`)}
+      ${filaDato("Declaraste", pesos(abono.montoDeclarado), true)}
+      ${filaDato("Canal", nombreDeCanal(abono))}
+      ${abono.transferidoEl ? filaDato("Fecha de la transferencia", fechaLarga(abono.transferidoEl)) : ""}
+      ${abono.referenciaExterna ? filaDato("Número de comprobante", abono.referenciaExterna) : ""}
+      ${filaDato("Verificado hasta ahora", pesos(datos.verificado))}
+      ${filaDato("Saldo (sin contar este)", pesos(datos.saldo))}
+    </table>` +
+    boton("Ver el estado de mi pago", urlPortal(ins)) +
+    parrafo(
+      `Si te equivocaste en algún dato, escríbenos a <a href="mailto:${EVENTO.correoContacto}" style="color:${RIO}">${EVENTO.correoContacto}</a> antes de que lo revisemos.`,
+    );
+  return {
+    asunto: `Recibimos tu comprobante de ${pesos(abono.montoDeclarado)} — falta verificarlo`,
+    html: envoltura({
+      eyebrow: "Comprobante recibido",
+      titulo: "Lo tenemos. Ahora lo verificamos.",
+      colorEyebrow: MAREA,
+      cuerpo,
+      ins,
+    }),
+    texto: `${nombreCorto(ins)}, recibimos tu comprobante de ${pesos(abono.montoDeclarado)} vía ${nombreDeCanal(abono)}. Todavía no cuenta como pagado: te avisamos cuando lo verifiquemos.`,
+  };
+}
+
+/**
+ * El abono quedó confirmado. Lo que el ciclista busca aquí es una sola cifra:
+ * cuánto le falta.
+ *
+ * Si aprobamos por un monto distinto al que declaró, se dice — descubrirlo
+ * después cuadrando cuentas es lo que produce el reclamo.
+ */
+export function evidenciaVerificada(
+  ins: Inscripcion,
+  abono: Abono,
+  datos: { verificado: number; saldo: number },
+): PlantillaCorreo {
+  const aprobado = abono.montoAprobado ?? abono.montoDeclarado;
+  const difiere = aprobado !== abono.montoDeclarado;
+  const cuerpo =
+    parrafo(
+      `${nombreCorto(ins)}, verificamos tu comprobante: <strong>${pesos(aprobado)}</strong> entraron a tu inscripción.`,
+    ) +
+    (difiere
+      ? recuadroMotivo(
+          "Ojo con el monto",
+          `Tú declaraste ${pesos(abono.montoDeclarado)} y lo que confirmamos en la cuenta fueron ${pesos(aprobado)}. Es esta última cifra la que cuenta. Si no te cuadra, escríbenos a ${EVENTO.correoContacto}.`,
+        )
+      : "") +
+    barraProgreso(datos.verificado, ins.total) +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:18px 0 6px">
+      ${filaDato("Abono verificado", pesos(aprobado))}
+      ${filaDato("Llevas pagado", pesos(datos.verificado))}
+      ${filaDato("Te falta", pesos(datos.saldo), true)}
+    </table>` +
+    parrafo(
+      `Te faltan <strong>${pesos(datos.saldo)}</strong>. Puedes abonarlos de una vez o repartirlos: llevas ${abono.numero} de ${MAX_ABONOS} comprobantes.`,
+    ) +
+    tablaCuentas() +
+    boton("Subir el siguiente comprobante", urlPortal(ins)) +
+    avisoDeCierre();
+  return {
+    asunto: `Abono verificado: ${pesos(aprobado)} — te faltan ${pesos(datos.saldo)}`,
+    html: envoltura({
+      eyebrow: "Abono verificado",
+      titulo: `Confirmamos ${pesos(aprobado)}.`,
+      cuerpo,
+      ins,
+    }),
+    texto: `Verificamos tu abono de ${pesos(aprobado)}. Llevas ${pesos(datos.verificado)} de ${pesos(ins.total)} y te faltan ${pesos(datos.saldo)}.`,
+  };
+}
+
+/**
+ * Saldo en cero por abonos. Es el correo que habilita el dorsal
+ * (docs/decisiones-pago-manual.md §3), así que lo dice explícitamente.
+ */
+export function inscripcionCompleta(
+  ins: Inscripcion,
+  datos?: { excedente?: number },
+): PlantillaCorreo {
+  const cat = categoriaPorCodigo(ins.categoriaCodigo);
+  const recorrido = recorridoDe(cat);
+  const sobra = datos?.excedente ?? 0;
+  const cuerpo =
+    parrafo(
+      `${nombreCorto(ins)}, cubriste el total. Tu inscripción a <strong>${cat?.nombre}</strong> queda pagada por completo: ${pesos(ins.total)}, sin un peso de recargo.`,
+    ) +
+    barraProgreso(ins.total, ins.total) +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:18px 0 6px">
+      ${filaDato("Categoría", cat?.nombre ?? ins.categoriaCodigo)}
+      ${recorrido ? filaDato("Recorrido", recorrido) : ""}
+      ${filaDato("Fecha de carrera", EVENTO.fechaLegible)}
+      ${PRENDAS.map((p) => filaDato(p.nombre, ins.tallas[p.campo])).join("")}
+      ${filaDato("Total pagado", pesos(ins.total), true)}
+    </table>` +
+    (sobra > 0
+      ? recuadroMotivo(
+          "Transferiste de más",
+          `Nos entraron ${pesos(sobra)} por encima del total. No lo devolvemos automáticamente: escríbenos a ${EVENTO.correoContacto} y lo resolvemos contigo.`,
+        )
+      : "") +
+    parrafo(
+      `Ya puedes ver e imprimir tu constancia de inscripción con el número de dorsal. Nos vemos en la línea de largada el ${EVENTO.fechaLegible} en ${EVENTO.lugar}.`,
+    ) +
+    boton("Ver mi inscripción", urlPortal(ins)) +
+    parrafo(
+      `Guarda la referencia <strong>${ins.referencia}</strong>: la vas a necesitar para retirar tu kit el día previo a la carrera.`,
+    );
+  return {
+    asunto: `Inscripción pagada — nos vemos en ${EVENTO.lugar}`,
+    html: envoltura({
+      eyebrow: "Pago completo",
+      titulo: "Tu inscripción quedó pagada.",
+      cuerpo,
+      ins,
+    }),
+    texto: `${nombreCorto(ins)}, tu inscripción quedó pagada por completo: ${pesos(ins.total)}. Referencia ${ins.referencia}.`,
+  };
+}
+
+/**
+ * Cesión del cupo a otra persona.
+ *
+ * La política del cliente es no devolver el dinero pero sí permitir ceder la
+ * inscripción. Este correo va a la persona NUEVA, que muy probablemente nunca
+ * ha tratado con nosotros: tiene que explicarle qué acaba de recibir, y dejar
+ * claro qué se conserva (referencia, categoría, lo pagado) y qué falta.
+ */
+export function cambioDeCompetidor(
+  ins: Inscripcion,
+  datos: {
+    anterior: Pick<DatosCiclista, "nombres" | "apellidos">;
+    hechoPor: string;
+    saldo: number;
+  },
+): PlantillaCorreo {
+  const cat = categoriaPorCodigo(ins.categoriaCodigo);
+  const cuerpo =
+    parrafo(
+      `${nombreCorto(ins)}, la inscripción que estaba a nombre de <strong>${datos.anterior.nombres} ${datos.anterior.apellidos}</strong> quedó a tu nombre. Conserva la misma referencia, la misma categoría y todo lo que ya se había abonado.`,
+    ) +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:22px 0 6px">
+      ${filaDato("Referencia", ins.referencia, true)}
+      ${filaDato("Categoría", cat?.nombre ?? ins.categoriaCodigo)}
+      ${filaDato("Fecha de carrera", EVENTO.fechaLegible)}
+      ${PRENDAS.map((p) => filaDato(p.nombre, ins.tallas[p.campo])).join("")}
+      ${filaDato("Total", pesos(ins.total))}
+      ${filaDato("Ya abonado", pesos(ins.pagado))}
+      ${filaDato("Te falta", pesos(datos.saldo), true)}
+    </table>` +
+    (datos.saldo > 0
+      ? parrafo(
+          `Faltan <strong>${pesos(datos.saldo)}</strong> por abonar. Transfieres a una de estas cuentas y subes el comprobante desde tu inscripción.`,
+        ) +
+        tablaCuentas() +
+        boton("Ver mi inscripción", urlPortal(ins)) +
+        avisoDeCierre()
+      : parrafo(`No queda saldo pendiente: la inscripción está pagada al día.`) +
+        boton("Ver mi inscripción", urlPortal(ins))) +
+    parrafo(
+      `El cambio lo hizo ${datos.hechoPor} de la organización el ${new Date().toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" })}. Si algún dato tuyo quedó mal, escríbenos a <a href="mailto:${EVENTO.correoContacto}" style="color:${RIO}">${EVENTO.correoContacto}</a>.`,
+    );
+  return {
+    asunto: `La inscripción ${ins.referencia} quedó a tu nombre`,
+    html: envoltura({
+      eyebrow: "Cambio de competidor",
+      titulo: "El cupo ahora es tuyo.",
+      colorEyebrow: SOL,
+      cuerpo,
+      ins,
+    }),
+    texto: `${nombreCorto(ins)}, la inscripción ${ins.referencia} (${cat?.nombre}) pasó a tu nombre. Total ${pesos(ins.total)}, ya abonado ${pesos(ins.pagado)}, te falta ${pesos(datos.saldo)}.`,
+  };
+}
+
+/**
+ * Índice de plantillas por el nombre con el que se registran en `correos`.
+ *
+ * Las firmas no son homogéneas a propósito: cada correo necesita datos
+ * distintos y forzar un parámetro común obligaría a recalcular saldos dentro
+ * de la plantilla, que es justo donde no debe vivir esa cuenta.
+ */
 export const PLANTILLAS = {
   "inscripcion-confirmada": inscripcionConfirmada,
   "plan-cuotas-activado": planCuotasActivado,
+  "cuota-pagada": cuotaPagada,
+  "recordatorio-cuota": recordatorioCuota,
+  "cuota-fallida": cuotaFallida,
   "inscripcion-saldada": inscripcionSaldada,
+  "evidencia-recibida": evidenciaRecibida,
+  "evidencia-verificada": evidenciaVerificada,
+  "evidencia-rechazada": evidenciaRechazada,
+  "inscripcion-completa": inscripcionCompleta,
+  "cambio-competidor": cambioDeCompetidor,
 } as const;
+
+export type NombrePlantilla = keyof typeof PLANTILLAS;

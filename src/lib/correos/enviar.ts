@@ -2,6 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { Resend } from "resend";
 import { registrarCorreo } from "../almacen";
+import { EVENTO } from "../catalogo";
 import type { Inscripcion } from "../tipos";
 import type { PlantillaCorreo } from "./plantillas";
 
@@ -15,8 +16,9 @@ import type { PlantillaCorreo } from "./plantillas";
 
 const API_KEY = process.env.RESEND_API_KEY;
 const REMITENTE =
-  process.env.CORREO_REMITENTE ?? "Tibet Epic XCM <inscripciones@tibetepic.com>";
-const RESPONDER_A = process.env.CORREO_RESPUESTA ?? "contacto@tibetepic.com";
+  process.env.CORREO_REMITENTE ??
+  `${EVENTO.nombre} <${EVENTO.correoContacto}>`;
+const RESPONDER_A = process.env.CORREO_RESPUESTA ?? EVENTO.correoContacto;
 
 export const MODO_CORREO: "resend" | "simulacion" = API_KEY ? "resend" : "simulacion";
 

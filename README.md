@@ -1,439 +1,311 @@
-# Tibet Epic XCM — inscripciones y recaudo
+# Santander Xtreme 2027 — inscripciones y recaudo
 
-Plataforma de inscripción y cobro para el maratón de montaña **Tibet Epic XCM 2027**.
-Permite inscribirse en cinco pasos y pagar de contado o en cuatro cuotas mensuales
-que se cobran solas.
+Plataforma de inscripción y cobro para la **10ª edición "El Legado"**, maratón
+de montaña (MTB · XCM · 2 etapas) del 3 al 5 de julio de 2027 en Barichara,
+Santander.
 
-**Next.js 16** (App Router) · **React 19** · **Tailwind 4** · **Postgres** (Neon) ·
-**Wompi** (Bancolombia) · **Resend**
-
----
+El ciclista se inscribe en cinco pasos, paga **por transferencia bancaria** —de
+una o hasta en tres abonos— y **adjunta el comprobante**. La organización lo
+revisa a mano y aprueba. Cuando el saldo llega a cero, sale el dorsal.
 
 ## Arranque
 
 ```bash
 pnpm install
-cp .env.example .env.local                        # y pega tus llaves
-node --env-file=.env.local scripts/migrar.mjs     # crea las tablas
+cp .env.example .env.local     # y rellena lo que necesites
+node --env-file=.env.local scripts/migrar.mjs
 pnpm dev
-node scripts/sembrar-demo.mjs                     # datos de ejemplo
 ```
 
-Sin `DATABASE_URL` la app arranca igual, guardando en `.datos/`. Sirve para ver la
-demo; no para producción. Sin llaves de Wompi corre en modo simulación.
-
----
+Sin `DATABASE_URL` la aplicación guarda en `.datos/` (archivos JSON), sin
+`RESEND_API_KEY` los correos se renderizan y quedan en `/correos` en vez de
+enviarse, y sin `BLOB_READ_WRITE_TOKEN` los comprobantes se guardan en disco.
+**Todo el flujo se puede demostrar sin una sola credencial.**
 
 ## Arquitectura
 
 ```mermaid
-graph TD
-    subgraph nav["Navegador"]
-        F["Formulario · 5 pasos"]
-        M["Modal de Wompi<br/>captura la tarjeta"]
-        P["Portal del ciclista<br/>y ticket"]
-    end
+flowchart TB
+  subgraph nav["Navegador"]
+    F["Formulario de inscripción<br/>5 pasos"]
+    C["Caja de comprobante<br/>comprime la imagen antes de subir"]
+    P["Portal del ciclista<br/>saldo e historial"]
+  end
 
-    subgraph app["Next.js · App Router"]
-        API["Rutas /api"]
-        SRV["lib/servicio.ts<br/>reglas de negocio"]
-        ALM["lib/almacen<br/>persistencia"]
-        WOM["lib/wompi.ts<br/>cliente de pagos"]
-        COR["lib/correos<br/>plantillas y envío"]
-    end
+  subgraph srv["Next.js — App Router"]
+    API["/api/inscripciones<br/>/api/evidencias"]
+    PANEL["/panel — cola de revisión<br/>tras sesión"]
+    SVC["servicio.ts<br/>todas las reglas de negocio"]
+  end
 
-    subgraph fuera["Servicios externos"]
-        WP["Wompi<br/>bóveda y cobros"]
-        RS["Resend · correo"]
-        PG["Postgres · Neon"]
-    end
+  subgraph datos["Persistencia"]
+    PG[("Postgres · Neon<br/>inscripciones · abonos<br/>cuotas · correos")]
+    BLOB[["Vercel Blob privado<br/>comprobantes"]]
+  end
 
-    CRON["Cron diario<br/>8:00 Colombia"]
+  MAIL["Resend"]
 
-    F -->|"datos de la inscripción"| API
-    M -->|"token de la tarjeta"| API
-    P -->|"consultas y adelantos"| API
-    API --> SRV
-    SRV --> ALM
-    SRV --> WOM
-    SRV --> COR
-    ALM --> PG
-    WOM -->|"cobra"| WP
-    COR -->|"envía"| RS
-    WP -.->|"webhook: resultado real"| API
-    CRON -->|"GET /api/cobros"| API
+  F --> API --> SVC
+  C --> API
+  P --> SVC
+  PANEL --> SVC
+  SVC --> PG
+  API --> BLOB
+  PANEL -.URL firmada.-> BLOB
+  SVC --> MAIL
+
+  classDef d fill:#e8f4ff,stroke:#0b3d64,color:#0b3d64
+  class PG,BLOB d
 ```
 
-**La regla que sostiene todo:** nadie fuera de `lib/servicio.ts` decide sobre dinero,
-y nadie fuera de `lib/almacen` toca la persistencia.
-
----
+El almacén es intercambiable: `src/lib/almacen/index.ts` elige Postgres o
+archivos JSON según haya `DATABASE_URL`. Lo mismo el almacenamiento de
+comprobantes y el envío de correo. Esa simetría es deliberada — permite correr
+la demo completa sin credenciales y sin ramas `if` regadas por el código.
 
 ## El flujo de inscripción
 
-Cinco pasos. La inscripción se crea en la base al salir de *Permisos*, antes de pagar,
-para que un pago fallido no obligue a llenar todo otra vez.
-
 ```mermaid
-graph LR
-    A["KM 00<br/>Categoría"] --> B["KM 23<br/>Datos"]
-    B --> C["KM 46<br/>Tallas"]
-    C --> D["KM 69<br/>Permisos"]
-    D -->|"POST /api/inscripciones"| E["KM 92<br/>Pago"]
-    E --> T["Ticket"]
+flowchart LR
+  A["1· Categoría"] --> B["2· Datos"] --> C["3· Tallas"]
+  C --> D["4· Legales"] --> E["5· Pago"]
+  E --> F{"¿Cómo paga?"}
+  F -->|Total| G["Transfiere $380.000"]
+  F -->|Abonos| H["Transfiere el primero<br/>máximo 3"]
+  G --> I["Adjunta comprobante"]
+  H --> I
+  I --> J["EN_VERIFICACION"]
+  J --> K{"La organización revisa"}
+  K -->|Verifica| L{"¿Saldo en cero?"}
+  K -->|Rechaza| M["Vuelve a subir<br/>el cupo no se pierde"]
+  M --> I
+  L -->|Sí| N["COMPLETA · sale el dorsal"]
+  L -->|No| O["Abona lo que falta"]
+  O --> I
 ```
-
-El avance no se muestra como «paso 3 de 5» sino como el **perfil de altimetría de la
-carrera**: un ciclista de XCM sabe dónde está por el kilómetro y la pendiente.
-
----
 
 ## Pagos
 
-### Lo primero: Wompi no tiene cuotas
+### Por qué el cobro es manual
 
-Hay que separar tres cosas que se llaman igual:
+La organización recauda por transferencia a sus propias cuentas —Bancolombia
+Ahorros, Nequi, Daviplata y Bre-B— y **verifica cada comprobante a mano**. No
+hay pasarela cobrando: el dinero lo empuja el ciclista, nadie le cobra.
 
-| | Qué es |
-|---|---|
-| `payment_method.installments` | **Cuotas del banco emisor.** El banco financia al tarjetahabiente y al comercio le consignan todo de una. No sirve para recaudo mensual. |
-| Suscripciones | **No existen en Wompi.** |
-| **Fuentes de pago** | Lo que sí hay, y lo que usamos: Wompi guarda la tarjeta y nos da un `payment_source_id` para cobrar cuando queramos. |
+Eso tiene una consecuencia de diseño que conviene entender: **el monto y la
+fecha los decide el ciclista**, no un calendario. Por eso la verdad del saldo
+no es una tabla de cuotas programadas sino la suma de los abonos verificados.
 
-**El calendario, los reintentos, la mora y los correos son lógica de esta app.** Wompi
-es el datáfono; nosotros decidimos a quién cobrarle, cuándo y qué hacer si el banco
-rechaza.
-
-### Pago de contado
-
-```mermaid
-sequenceDiagram
-    participant C as Ciclista
-    participant A as App
-    participant W as Wompi
-
-    C->>A: Elige "todo de una"
-    A->>A: Calcula la firma de integridad<br/>(el secreto no sale del servidor)
-    A-->>C: Configuración del widget
-    C->>W: Abre el modal y paga
-    W-->>C: Devuelve id de transacción
-    C->>A: POST /api/pagos/confirmar
-    A->>W: GET /transactions/{id}
-    W-->>A: APPROVED
-    A->>A: Marca pagado y envía comprobante
-    W--)A: Webhook (fuente de verdad)
+```
+saldo = total − Σ(abonos verificados)
 ```
 
-No le creemos al navegador: el modal nos da un id y **nosotros le preguntamos a Wompi**
-cuál es el estado real.
+### Abonos
 
-### Activar el plan de cuotas
+- **Pago total**: un movimiento por $380.000.
+- **Abonos**: hasta **3**, de monto libre.
 
-El modal se abre en modo `tokenize`: **no cobra nada**, solo captura la tarjeta. El
-número nunca pasa por nuestro servidor.
+Un abono **rechazado no gasta intento**. El excedente (si alguien transfiere de
+más) se expone aparte y **nunca** hace el saldo negativo.
 
-```mermaid
-sequenceDiagram
-    participant C as Ciclista
-    participant A as App
-    participant W as Wompi
-
-    C->>A: Elige "4 cuotas" y autoriza el cobro recurrente
-    C->>W: Modal en modo tokenize
-    W-->>A: POST /api/pagos/tokenizado (token de tarjeta)
-    A->>W: POST /payment_sources
-    W-->>A: payment_source_id
-    A->>A: Crea el calendario de 4 cuotas
-    A->>W: POST /transactions (cuota 1)
-    W-->>A: PENDING, luego APPROVED
-    A->>C: Correo con el calendario y la constancia
-```
-
-### Cobro mensual
-
-```mermaid
-sequenceDiagram
-    participant K as Cron (8:00)
-    participant A as App
-    participant W as Wompi
-    participant C as Ciclista
-
-    K->>A: GET /api/cobros
-    A->>A: Busca cuotas que vencen hoy
-    Note over A: Faltan 3 días, sale correo de aviso
-    A->>W: POST /transactions con payment_source_id
-    alt Aprobado
-        W-->>A: APPROVED
-        A->>C: Comprobante con el saldo restante
-    else Rechazado
-        W-->>A: DECLINED y el motivo
-        A->>C: Correo con el motivo y cómo resolverlo
-        Note over A: Reintenta a las 48 h, hasta 3 veces
-    end
-```
-
-### Estados de una cuota
+### Ciclo de vida de un abono
 
 ```mermaid
 stateDiagram-v2
-    [*] --> PENDIENTE: se crea el calendario
-    PENDIENTE --> EN_PROCESO: se reclama para cobrar
-    EN_PROCESO --> PAGADA: APPROVED
-    EN_PROCESO --> FALLIDA: DECLINED o ERROR
-    EN_PROCESO --> EN_PROCESO: sigue PENDING, lo cierra el webhook
-    FALLIDA --> EN_PROCESO: reintento a las 48 h
-    PAGADA --> [*]
+  [*] --> ENVIADA: el ciclista sube el comprobante
+  ENVIADA --> EN_REVISION: un revisor lo toma
+  EN_REVISION --> VERIFICADA: aprobado (monto editable)
+  EN_REVISION --> RECHAZADA: rechazado con motivo
+  RECHAZADA --> [*]: puede volver a intentar
+  VERIFICADA --> [*]
 ```
 
-**`EN_PROCESO` no es decorativo.** Wompi responde `PENDING` y liquida un par de segundos
-después; tratar ese `PENDING` como fallo hacía que reintentáramos un cobro que iba a
-aprobarse — y eso es cobrar dos veces. Una cuota sin liquidar nunca se reintenta.
+`EN_REVISION` no es decorativo: es lo que impide que **dos personas de la
+organización aprueben el mismo comprobante a la vez**. Se entra a ese estado
+con un `UPDATE` condicional atómico (`reclamarAbono`), no con un
+lee-modifica-escribe.
 
-### Cómo se evita el cobro doble
+### Revisión
 
-Tres capas independientes:
+```mermaid
+sequenceDiagram
+  participant R as Revisor
+  participant P as /panel/evidencias
+  participant S as servicio.ts
+  participant B as Blob privado
+  participant M as Resend
 
-1. **Reclamo atómico.** Tomar una cuota es un solo `UPDATE ... WHERE estado <> 'EN_PROCESO'`.
-   Si entran dos peticiones a la vez, la base deja pasar una y a la otra le devuelve cero filas.
-2. **Estado `EN_PROCESO`.** Un cobro cuyo resultado no conocemos no se relanza.
-3. **Referencia única por intento** (`TE27-XXXXXX-C2-1`). Wompi rechaza referencias repetidas.
+  R->>P: entra con la clave del panel
+  P->>S: abonosPorRevisar()
+  P->>B: URL firmada (10 min)
+  B-->>R: el comprobante
+  R->>P: Verificar $180.000<br/>(declaró $190.000)
+  P->>S: reclamarAbono → atómico
+  S->>S: recalcula saldo
+  S->>M: "Abono verificado · te faltan $200.000"
+  Note over S: si el saldo llega a 0<br/>manda "inscripción completa"<br/>con el dorsal
+```
 
----
+Detalles que importan en esta pantalla:
+
+- **El monto se puede corregir.** El ciclista declara $190.000 y transfirió
+  $180.000: pasa constantemente. Manda siempre `montoAprobado`.
+- **Rechazar exige motivo** — el ciclista lo lee en su correo.
+- **La evidencia repetida se marca**: la misma captura enviada en dos
+  inscripciones se detecta por SHA-256 del contenido.
+- **El nombre del revisor sale de la sesión**, nunca del cuerpo de la petición.
+
+### Qué protege el dinero
+
+Tres barreras independientes, cada una por un incidente distinto:
+
+| Riesgo | Defensa |
+|---|---|
+| Dos revisores aprueban el mismo abono | `UPDATE` condicional atómico |
+| Alguien reenvía la misma captura | SHA-256 del contenido, marcado en la cola |
+| Un ejecutable disfrazado de `.jpg` | Tipo detectado por **bytes mágicos**, no por lo que declara el navegador |
+| Un comprobante filtrado | Blob privado + URL firmada de 10 min + sesión exigida dos veces |
+
+## Seguridad
+
+`/panel` y `/correos` están detrás de una **clave compartida** (`PANEL_CLAVE`)
+con cookie firmada por HMAC (`PANEL_SECRETO`). La comparación de la clave es en
+tiempo constante para que el tiempo de respuesta no la filtre.
+
+En Next 16 el fichero se llama `src/proxy.ts` — `middleware.ts` está
+deprecado. El proxy es la primera barrera; **las rutas que devuelven
+comprobantes vuelven a comprobar la sesión por su cuenta**, para que cambiar el
+matcher no las deje abiertas en silencio.
+
+> **Esto no es identidad por persona.** El revisor escribe su nombre al entrar
+> y ese nombre queda en `revisado_por`, pero cualquiera con la clave puede
+> escribir cualquier nombre. Sirve mientras revise un equipo pequeño y de
+> confianza; **no sirve como auditoría formal**. Si van a revisar varias
+> personas, hace falta un usuario por cabeza.
+
+Un comprobante bancario lleva nombre, cuenta y montos: es dato personal bajo la
+Ley 1581. Nunca se sirve desde una carpeta pública ni por una URL adivinable.
 
 ## Modelo de datos
 
 ```mermaid
 erDiagram
-    INSCRIPCIONES ||--o{ CUOTAS : tiene
-    INSCRIPCIONES {
-        uuid id PK
-        text referencia UK
-        text estado
-        text categoria_codigo
-        jsonb ciclista
-        jsonb tallas
-        jsonb consentimientos
-        text plan
-        integer total
-        integer pagado
-        bigint fuente_pago_id
-        jsonb tarjeta_resumen
-        jsonb autorizacion_cobro
-        jsonb eventos
-    }
-    CUOTAS {
-        uuid inscripcion_id PK
-        integer numero PK
-        date vence
-        integer monto
-        text estado
-        text referencia
-        text transaccion_id
-        integer intentos
-        timestamptz ultimo_intento_en
-        text ultimo_error
-    }
-    CORREOS {
-        uuid id PK
-        text para
-        text asunto
-        text plantilla
-        text html
-        text referencia
-    }
+  INSCRIPCIONES ||--o{ ABONOS : "recibe"
+  INSCRIPCIONES ||--o{ CUOTAS : "planifica"
+  INSCRIPCIONES ||--o{ CORREOS : "genera"
+
+  INSCRIPCIONES {
+    uuid id PK
+    text referencia UK "SX27-A4F91C"
+    text estado "BORRADOR·PENDIENTE_PAGO·EN_VERIFICACION·AL_DIA·EN_MORA·COMPLETA"
+    text medio_pago "TRANSFERENCIA·WOMPI"
+    text plan "TOTAL·ABONOS"
+    jsonb ciclista "nombre·documento·contacto"
+    int total
+    int pagado
+    jsonb eventos "bitácora"
+  }
+  ABONOS {
+    uuid id PK
+    int numero "1..3"
+    text canal "BANCOLOMBIA·NEQUI·DAVIPLATA·BRE_B"
+    int monto_declarado "lo que dice el ciclista"
+    int monto_aprobado "lo que confirma el revisor"
+    text evidencia_clave "en Blob, nunca una URL pública"
+    text evidencia_sha256 "detecta reenvíos"
+    text estado
+    text revisado_por
+    text motivo_rechazo
+  }
 ```
 
-- `estado` de la inscripción: `PENDIENTE_PAGO` · `AL_DIA` · `EN_MORA` · `COMPLETA`
-- `plan`: `CONTADO` · `CUOTAS`
-- `fuente_pago_id`: el id que Wompi da al guardar la tarjeta
-- `autorizacion_cobro`: constancia con texto, hora, IP y navegador
+`monto_aprobado` manda sobre `monto_declarado` en toda cuenta de dinero. Una
+restricción de la base impide que un abono quede verificado sin cifra: dinero
+sin monto no es dinero.
 
-**Por qué las cuotas son filas y el ciclista es `jsonb`:** las cuotas son el libro de
-dinero — se actualizan una por una, se consultan por vencimiento y llevan `CHECK` de
-monto positivo y estados válidos. Los datos del ciclista siempre se leen y escriben
-completos, así que como documento son más simples, con índices de expresión sobre
-documento y correo, que son los únicos campos por los que se busca.
-
-El dinero se guarda en **pesos enteros**: el COP no maneja centavos en la práctica.
-Wompi sí trabaja en centavos, y la conversión vive en un solo sitio (`aCentavos`).
-
-### El reparto de las cuotas
-
-`repartirEnCuotas()` redondea al millar y mete el sobrante en las primeras cuotas, de
-modo que la suma **siempre** da el total exacto:
-
-```
-750.000 → 188.000 · 188.000 · 187.000 · 187.000
-```
-
-Nada de «4 × 188.000 = 752.000».
-
----
+Los abonos **no** pasan por `guardarInscripcion`, que borra y reinserta cuotas
+en cada guardado. Borrar y reinsertar evidencias con su historial de revisión
+sería destructivo, así que tienen sus propias funciones de acceso.
 
 ## Correos
 
-Seis plantillas en `src/lib/correos/plantillas.ts`. HTML con tablas y estilos en línea a
-propósito: Gmail y Outlook descartan `<style>` externo, flexbox y fuentes web.
+Once plantillas, todas en `src/lib/correos/plantillas.ts` y visibles
+renderizadas en `/correos`. Las que importan en pago manual:
 
-| Plantilla | Cuándo sale |
+| Plantilla | Cuándo |
 |---|---|
-| `inscripcion-confirmada` | Pago de contado aprobado |
-| `plan-cuotas-activado` | Primera cuota cobrada, con el calendario y la constancia |
-| `cuota-pagada` | Cada cobro mensual, con comprobante y saldo restante |
-| `recordatorio-cuota` | Tres días antes del cobro |
-| `cuota-fallida` | El banco rechazó, con el motivo y cómo resolverlo |
-| `inscripcion-saldada` | Última cuota pagada |
+| `evidenciaRecibida` | Al subir el comprobante |
+| `evidenciaVerificada` | Aprobado, con el saldo que queda |
+| `evidenciaRechazada` | Rechazado, con el motivo y cómo reintentar |
+| `inscripcionCompleta` | Saldo en cero, con el dorsal |
+| `recordatorioCuota` | Faltan días y hay saldo |
+| `cambioDeCompetidor` | Cesión del cupo |
 
-Todo lo enviado queda en **`/correos`**, con vista previa del HTML real.
+> El recordatorio decía **"no tienes que hacer nada"** cuando cobraba la
+> tarjeta. En pago manual es exactamente al revés y ahora dice *"este pago no
+> sale solo"*. Invertirlo era el error más caro de esta migración.
 
-### Para que no caigan en spam
+Un fallo al enviar correo **no revierte la aprobación**: verificar mueve
+dinero, notificar no. Una caída de Resend no puede hacerle creer al revisor que
+la aprobación falló.
 
-El proveedor no es lo que decide: lo que manda a spam es no tener el DNS en orden. En
-`tibetepic.com` hay que publicar **DKIM**, **SPF** (`v=spf1 include:amazonses.com ~all`)
-y **DMARC** (`v=DMARC1; p=none; rua=mailto:dmarc@tibetepic.com`, subiendo a `quarantine`
-cuando los reportes salgan limpios), y enviar desde un subdominio dedicado para que un
-problema de reputación no toque el correo corporativo.
+## Cambio de competidor
 
----
+La política del evento no devuelve dinero pero **sí permite ceder el cupo**.
+Se hace desde `/panel/competidor`: se reemplazan los datos de identidad
+conservando referencia, categoría y todo lo pagado, queda constancia en la
+bitácora de quién lo hizo y cuándo, y se avisa a la persona nueva.
 
-## Autorización de cobro recurrente
-
-Las reglas de tarjeta archivada de Visa y Mastercard exigen que el tarjetahabiente
-autorice los cobros futuros **conociendo montos y fechas**, y que el comercio conserve
-constancia. Sin ella, un contracargo por «yo no autoricé eso» lo pierde el comercio.
-
-El texto lo **compone el servidor** a partir del mismo calendario con el que va a cobrar
-— si lo mandara el navegador, alguien podría alterar lo que «aceptó». Se guarda en
-`autorizacion_cobro` con hora, IP y navegador, va por escrito en el correo ya con la
-tarjeta real, y se puede consultar después desde el portal.
-
----
-
-## Estructura
-
-```
-src/
-  app/
-    page.tsx                    Landing
-    inscripcion/                Formulario de 5 pasos
-    mi-inscripcion/             Portal: saldo, cuotas, adelantar, saldar
-    ticket/[referencia]/        Ticket con dorsal, QR y estado de pago
-    panel/                      Vista de la organización
-    correos/                    Bandeja de lo enviado, con vista previa
-    api/
-      inscripciones/            POST  crea la inscripción
-      pagos/widget/             POST  configuración firmada del modal
-      pagos/tokenizado/         POST  recibe el token del modal, activa las cuotas
-      pagos/confirmar/          POST  verifica contra Wompi el pago del modal
-      pagos/cuota/              POST  cobra una cuota puntual
-      pagos/saldar/             POST  paga todo el saldo en un solo cobro
-      mi-inscripcion/           POST  consulta por documento y correo
-      wompi/webhook/            POST  fuente de verdad de los pagos
-      cobros/                   GET   barrido diario (cron)
-  lib/
-    catalogo.ts     Categorías, municipios, tallas, constantes del evento
-    dinero.ts       Reparto de cuotas, calendario, formato COP
-    validacion.ts   Esquemas de zod, compartidos cliente y servidor
-    autorizacion.ts Texto de la autorización de cobro recurrente
-    wompi.ts        Cliente de Wompi, firmas de integridad y de webhooks
-    servicio.ts     Reglas de negocio: cobrar, reintentar, disparar correos
-    db.ts           Pool de Postgres y helper de transacciones
-    esquema.sql     DDL idempotente
-    almacen/        postgres.ts | json.ts, elegidos en index.ts
-    correos/        Plantillas HTML y envío con Resend
-  components/
-    perfil-de-etapa.tsx   El progreso del formulario como altimetría
-    formulario/           Pasos, modal de Wompi, cortina de procesamiento
-```
-
----
-
-## Decisiones y por qué
-
-**Postgres detrás de una interfaz, con respaldo en archivo.** `src/lib/almacen/` es lo
-único que toca la persistencia. Con `DATABASE_URL` usa Postgres; sin ella cae al archivo
-JSON, para que cualquiera pueda clonar el repo y ver la demo sin montar una base. Lo que
-gana Postgres no es velocidad, es integridad: guardar una inscripción con sus cuotas es
-**una sola transacción**.
-
-**Driver `pg` normal, no el HTTP de Neon.** La app corre en un contenedor de larga vida,
-no en funciones serverless, así que un pool clásico es más rápido y más simple.
-
-**El webhook es la fuente de verdad.** El cobro por API da respuesta inmediata, pero un
-pago por PSE o efectivo solo vuelve por webhook. `/api/wompi/webhook` valida la firma
-SHA-256 y es idempotente: si Wompi repite el evento, no se manda el correo dos veces.
-
-**La tarjeta nunca pasa por nuestro servidor.** El modal de Wompi la captura y nos
-devuelve un token. Eso saca el número de tarjeta de nuestro alcance PCI.
-
-**El ticket lleva un QR real.** Apunta a su propia URL, así que en la entrega de kits se
-escanea y abre la inscripción con su estado de pago. El dorsal sale de un hash estable de
-la referencia: el mismo ciclista ve siempre el mismo número sin contador en base de datos.
-
-**Cortina de procesamiento.** El cobro tarda varios segundos con la página quieta. Sin
-una señal visible, el ciclista cree que el botón no hizo nada y vuelve a darle — que es
-justo como se generan los cobros dobles.
-
----
+Los campos arrancan **vacíos** a propósito: prellenarlos con los del titular
+anterior haría que, al no tocar el correo, la constancia se fuera a quien
+perdió el cupo.
 
 ## Variables de entorno
 
 ```bash
-# Base de datos (Neon o cualquier Postgres)
-DATABASE_URL="postgresql://usuario:clave@host/db?sslmode=verify-full"
+# Base de datos (Neon o cualquier Postgres). Sin esto, archivos JSON en .datos/
+DATABASE_URL=
 
-# Wompi — https://comercios.wompi.co
-WOMPI_MODO=sandbox                    # simulacion | sandbox | produccion
-WOMPI_URL_BASE=https://sandbox.wompi.co/v1
-NEXT_PUBLIC_WOMPI_LLAVE_PUBLICA=pub_test_...
-WOMPI_LLAVE_PRIVADA=prv_test_...      # crea fuentes de pago y cobra
-WOMPI_SECRETO_INTEGRIDAD=test_integrity_...
-WOMPI_SECRETO_EVENTOS=test_events_...
+# Panel de la organización
+PANEL_SECRETO=      # firma la cookie; ≥16 caracteres
+PANEL_CLAVE=        # la que se le da a quien revisa
 
-# Resend — https://resend.com/api-keys
-RESEND_API_KEY=re_...
-CORREO_REMITENTE="Tibet Epic XCM <inscripciones@tibetepic.com>"
-CORREO_RESPUESTA=contacto@tibetepic.com
+# Comprobantes. Sin esto se guardan en .datos/evidencias/
+BLOB_READ_WRITE_TOKEN=
 
-# App
-URL_PUBLICA=https://inscripciones.tibetepic.com
-CRON_SECRETO=<cadena larga aleatoria>
+# Correo. Sin esto se renderizan en /correos sin enviarse
+RESEND_API_KEY=
+CORREO_REMITENTE=   # exige dominio verificado en Resend
+
+# Cuentas de recaudo. Tienen valor por defecto en el código; estas variables
+# permiten cambiarlas sin desplegar. Nequi, Daviplata y Bre-B comparten celular.
+RECAUDO_TITULAR=
+RECAUDO_BANCOLOMBIA=
+RECAUDO_CELULAR=
+
+# Cron de recordatorios (lo inyecta Vercel)
+CRON_SECRET=
 ```
-
-**Qué llave hace qué:** la pública abre el checkout y tokeniza (el titular está
-presente); la privada crea fuentes de pago y cobra (el titular **no** está presente).
-Por eso el cobro mensual necesita la privada y el contado no.
-
-El webhook se registra en el panel de Wompi apuntando a
-`https://<dominio>/api/wompi/webhook`. Para probarlo en local hace falta una URL pública:
-`ngrok http <puerto>`.
-
----
 
 ## Scripts
 
 ```bash
-node --env-file=.env.local scripts/migrar.mjs           # esquema e importación de la demo
-node --env-file=.env.local scripts/verificar-wompi.mjs  # prueba las llaves de punta a punta
-node scripts/sembrar-demo.mjs                           # inscripciones de ejemplo
-node scripts/grabar-demo.mjs                            # graba los vídeos de demo
+node --env-file=.env.local scripts/migrar.mjs                # crea el esquema
+node --env-file=.env.local scripts/migrar.mjs --sin-importar # solo el esquema
+node --env-file=.env.local scripts/sembrar-demo.mjs          # datos de ejemplo
 ```
 
-`verificar-wompi.mjs` recorre el mismo camino que la app — aceptaciones, tokenizar,
-fuente de pago, cobro y consulta — y no imprime ninguna llave. Si eso pasa, el modal
-funciona.
-
----
+`scripts/migrar.mjs` es idempotente. Si añades una columna, refléjala también
+en el importador: ya se perdió una en silencio por olvidarlo.
 
 ## Pendientes antes de producción
 
-1. **Autenticación en `/panel`.** Hoy está abierto.
-2. **Política de mora.** Tras tres cobros rechazados la inscripción queda marcada, pero
-   no se libera el cupo. Es una decisión del cliente, no técnica.
-3. **Cambiar de tarjeta.** Los correos lo ofrecen y no existe la pantalla.
-4. **Recordatorio robusto.** Hoy solo sale si el cron corre exactamente tres días antes;
-   debería registrar «recordatorio enviado» y mandarlo en cualquier día que falten ≤ 3.
-5. **Alerta si el cron no corre.** Si el barrido falla el día 5, nadie se entera y se
-   pierde un mes de recaudo.
-6. **Rotar las llaves de sandbox** y poner las de producción solo como variables de
-   entorno del hosting.
+- [ ] **Identidad por persona en el panel** si va a revisar más de una.
+- [ ] **Rotar credenciales**: las llaves y la cadena de conexión que se usaron
+      en desarrollo viajaron por chat. Trátalas como comprometidas.
+- [ ] **Dominio verificado en Resend** — un remitente de Gmail cae en spam.
+- [ ] **Política de mora**: qué pasa con quien no termina de abonar.
+- [ ] **Retención de comprobantes**: cuánto se guardan y quién puede verlos.
+- [ ] **Aviso si el cron falla** — hoy falla en silencio.
+- [ ] Datos que el cliente no ha entregado: cupo total, altimetría real, km y
+      desnivel por categoría, y fecha de cierre de inscripciones.

@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# El ejemplo sí se versiona: es la única documentación de qué variables
+# hace falta configurar. No lleva ningún valor real.
+!.env.example
 
 # vercel
 .vercel
@@ -44,3 +47,4 @@ next-env.d.ts
 # Grabaciones de demo: pesan y se regeneran con scripts/grabar-demo.mjs
 videos-demo/*.mp4
 videos-demo/.crudo/
+entregables/*.pdf

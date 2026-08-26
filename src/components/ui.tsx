@@ -1,21 +1,21 @@
 import Link from "next/link";
 import type { ComponentProps, ReactNode } from "react";
 
-type Tono = "lima" | "magenta" | "naranja" | "cielo" | "hueso" | "selva";
+type Tono = "turquesa" | "alerta" | "sol" | "marea" | "nube" | "rio";
 
 const FONDOS: Record<Tono, string> = {
-  lima: "bg-lima text-tinta",
-  magenta: "bg-magenta text-tinta",
-  naranja: "bg-naranja text-tinta",
-  cielo: "bg-cielo text-tinta",
-  hueso: "bg-hueso text-tinta",
-  selva: "bg-selva text-hueso",
+  turquesa: "bg-turquesa text-tinta",
+  alerta: "bg-alerta text-nube",
+  sol: "bg-sol text-tinta",
+  marea: "bg-marea text-tinta",
+  nube: "bg-nube text-tinta",
+  rio: "bg-rio text-nube",
 };
 
 /* --------------------------------- Tarjeta --------------------------------- */
 
 export function Tarjeta({
-  tono = "hueso",
+  tono = "nube",
   className = "",
   children,
   ...resto
@@ -38,7 +38,7 @@ type BotonProps = {
   children: ReactNode;
 };
 
-function clasesBoton(tono: Tono = "lima", tamano: "md" | "lg" = "md") {
+function clasesBoton(tono: Tono = "turquesa", tamano: "md" | "lg" = "md") {
   const medida =
     tamano === "lg" ? "px-8 py-4 text-lg" : "px-5 py-3 text-[0.95rem]";
   return `inline-flex items-center justify-center gap-2 rounded-2xl tinta-sm pulsable font-display font-extrabold tracking-tight disabled:opacity-45 disabled:pointer-events-none ${FONDOS[tono]} ${medida}`;
@@ -75,7 +75,7 @@ export function BotonEnlace({
 /* --------------------------------- Etiqueta -------------------------------- */
 
 export function Chip({
-  tono = "lima",
+  tono = "turquesa",
   children,
   className = "",
 }: {
@@ -116,18 +116,18 @@ export function Campo({
         className="font-display text-[0.8rem] font-bold uppercase tracking-[0.1em] text-tinta"
       >
         {etiqueta}
-        {obligatorio && <span className="text-magenta"> *</span>}
+        {obligatorio && <span className="text-alerta"> *</span>}
       </label>
       {children}
       {error ? (
         <p
           role="alert"
-          className="font-mono text-[0.72rem] font-bold text-[#c2185b]"
+          className="font-mono text-[0.72rem] font-bold text-alerta"
         >
           {error}
         </p>
       ) : ayuda ? (
-        <p className="text-[0.78rem] leading-snug text-[#5d6f63]">{ayuda}</p>
+        <p className="text-[0.78rem] leading-snug text-tinta/75">{ayuda}</p>
       ) : null}
     </div>
   );
@@ -149,15 +149,15 @@ export function TituloSeccion({
   return (
     <header className={`flex flex-col gap-3 ${className}`}>
       {eyebrow && (
-        <p className="font-mono text-[0.7rem] font-bold uppercase tracking-[0.22em] text-lima">
+        <p className="font-mono text-[0.7rem] font-bold uppercase tracking-[0.22em] text-rio">
           {eyebrow}
         </p>
       )}
-      <h2 className="font-display text-[clamp(1.9rem,4.6vw,3.1rem)] font-extrabold leading-[0.98] tracking-[-0.035em] text-hueso">
+      <h2 className="font-display text-[clamp(1.9rem,4.6vw,3.1rem)] font-extrabold leading-[0.98] tracking-[-0.035em] text-tinta">
         {titulo}
       </h2>
       {bajada && (
-        <p className="max-w-2xl text-[1.02rem] leading-relaxed text-hueso/70">
+        <p className="max-w-2xl text-[1.02rem] leading-relaxed text-tinta/75">
           {bajada}
         </p>
       )}

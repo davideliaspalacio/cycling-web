@@ -1,21 +1,32 @@
 @import "tailwindcss";
 
 /* ============================================================
-   TIBET EPIC XCM — sistema visual "cartoon futurista de páramo"
-   Fondo: noche de páramo. Tarjetas: calcomanías con tinta gruesa.
-   Acentos: luces de bici (lima, magenta, naranja, cielo).
+   SANTANDER XTREME — sistema visual "cartoon futurista de cañón"
+   Fondo: mediodía sobre el cañón del Chicamocha. Tarjetas: calcomanías
+   con tinta gruesa. Acentos: luces de bici (turquesa, sol, fucsia).
+
+   Los nombres dicen la verdad sobre el papel de cada color:
+     bruma     fondo de página, el cielo lavado del mediodía
+     nube      relleno blanco de tarjetas y campos
+     marea     azul pálido para rellenos suaves y chips
+     rio       azul profundo: superficie fuerte, enlaces, foco
+     tinta     borde, sombra dura y texto principal
+     turquesa  acento de marca (relleno; nunca texto sobre claro)
+     sol       acento cálido (relleno; nunca texto sobre claro)
+     fucsia    acento decorativo (relleno)
+     alerta    rojo de error, y solo de error
    ============================================================ */
 
 @theme {
-  --color-noche: #06110e;
-  --color-selva: #0d2a24;
-  --color-musgo: #164036;
-  --color-tinta: #04100c;
-  --color-hueso: #f3fbef;
-  --color-lima: #cbff47;
-  --color-magenta: #ff4d91;
-  --color-naranja: #ff9a2e;
-  --color-cielo: #63e6ff;
+  --color-bruma: #dfeefc;
+  --color-nube: #ffffff;
+  --color-marea: #b8dcf7;
+  --color-rio: #0b4f8f;
+  --color-tinta: #08213a;
+  --color-turquesa: #2fd2ef;
+  --color-sol: #ffb02e;
+  --color-fucsia: #ff5fa2;
+  --color-alerta: #c81e3c;
 
   --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
   --font-sans: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
@@ -24,7 +35,7 @@
   --shadow-ink: 6px 6px 0 0 var(--color-tinta);
   --shadow-ink-sm: 4px 4px 0 0 var(--color-tinta);
   --shadow-ink-lg: 10px 10px 0 0 var(--color-tinta);
-  --shadow-glow: 0 0 0 3px var(--color-tinta), 0 0 34px -6px var(--color-lima);
+  --shadow-glow: 0 0 0 3px var(--color-tinta), 0 0 34px -6px var(--color-rio);
 
   --animate-drift: drift 26s linear infinite;
   --animate-pulse-ring: pulse-ring 2.6s ease-out infinite;
@@ -42,13 +53,13 @@
 }
 @keyframes pulse-ring {
   0% {
-    box-shadow: 0 0 0 0 rgb(203 255 71 / 0.55);
+    box-shadow: 0 0 0 0 rgb(11 79 143 / 0.45);
   }
   70% {
-    box-shadow: 0 0 0 18px rgb(203 255 71 / 0);
+    box-shadow: 0 0 0 18px rgb(11 79 143 / 0);
   }
   100% {
-    box-shadow: 0 0 0 0 rgb(203 255 71 / 0);
+    box-shadow: 0 0 0 0 rgb(11 79 143 / 0);
   }
 }
 @keyframes rise {
@@ -81,14 +92,14 @@ html {
 }
 
 body {
-  background-color: var(--color-noche);
-  color: var(--color-hueso);
+  background-color: var(--color-bruma);
+  color: var(--color-tinta);
   font-family: var(--font-sans);
   font-feature-settings: "ss01", "cv01";
   overflow-x: hidden;
 }
 
-/* Textura de fondo: curvas de nivel + trama de puntos (papel de cómic) */
+/* Textura de fondo: luz de mediodía + trama de puntos (papel de cómic) */
 .terreno::before {
   content: "";
   position: fixed;
@@ -96,13 +107,9 @@ body {
   z-index: -2;
   pointer-events: none;
   background-image:
-    radial-gradient(
-      circle at 18% 12%,
-      rgb(203 255 71 / 0.1),
-      transparent 42%
-    ),
-    radial-gradient(circle at 84% 8%, rgb(99 230 255 / 0.09), transparent 40%),
-    radial-gradient(circle at 62% 92%, rgb(255 77 145 / 0.08), transparent 45%);
+    radial-gradient(circle at 18% 12%, rgb(47 210 239 / 0.3), transparent 42%),
+    radial-gradient(circle at 84% 8%, rgb(255 255 255 / 0.85), transparent 40%),
+    radial-gradient(circle at 62% 92%, rgb(11 79 143 / 0.12), transparent 45%);
 }
 
 .terreno::after {
@@ -112,10 +119,7 @@ body {
   z-index: -1;
   pointer-events: none;
   opacity: 0.5;
-  background-image: radial-gradient(
-    rgb(203 255 71 / 0.16) 1px,
-    transparent 1px
-  );
+  background-image: radial-gradient(rgb(11 79 143 / 0.22) 1px, transparent 1px);
   background-size: 26px 26px;
   mask-image: radial-gradient(ellipse at 50% 0%, black 10%, transparent 78%);
 }
@@ -144,17 +148,24 @@ body {
   box-shadow: 2px 2px 0 0 var(--color-tinta);
 }
 
-/* Foco visible siempre, sin excepción */
+/* Foco visible siempre, sin excepción.
+   Sobre fondo claro el azul profundo del río es lo que se ve; dentro de una
+   superficie `rio` el mismo azul desaparecería, así que ahí el contorno se
+   vuelve turquesa. */
 :where(a, button, input, select, textarea, [tabindex]):focus-visible {
-  outline: 3px solid var(--color-cielo);
+  outline: 3px solid var(--color-rio);
   outline-offset: 3px;
   border-radius: 2px;
+}
+.bg-rio :focus-visible,
+.bg-tinta :focus-visible {
+  outline-color: var(--color-turquesa);
 }
 
 /* Campos de formulario */
 .campo {
   width: 100%;
-  background: #fff;
+  background: var(--color-nube);
   color: var(--color-tinta);
   border: 3px solid var(--color-tinta);
   border-radius: 14px;
@@ -167,7 +178,8 @@ body {
     transform 0.14s ease;
 }
 .campo::placeholder {
-  color: #7c8f80;
+  /* 4.6:1 sobre blanco: el marcador de posición también se lee al sol. */
+  color: #5c7183;
 }
 .campo:hover:not(:disabled) {
   box-shadow: 5px 5px 0 0 var(--color-tinta);
@@ -177,20 +189,20 @@ body {
   transform: translate(-1px, -1px);
   box-shadow:
     5px 5px 0 0 var(--color-tinta),
-    0 0 0 3px var(--color-cielo);
+    0 0 0 3px var(--color-rio);
 }
 .campo:disabled {
-  background: #dfe7dc;
+  background: #dbe6f0;
   box-shadow: none;
 }
 .campo[aria-invalid="true"] {
   box-shadow:
     3px 3px 0 0 var(--color-tinta),
-    0 0 0 3px var(--color-magenta);
+    0 0 0 3px var(--color-alerta);
 }
 select.campo {
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%2304100c'%3E%3Cpath d='M5 7l5 6 5-6z'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%2308213a'%3E%3Cpath d='M5 7l5 6 5-6z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.7rem center;
   background-size: 1.35rem;
@@ -209,15 +221,35 @@ select.campo {
   height: 12px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--color-noche);
+  background: var(--color-bruma);
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-musgo);
-  border: 3px solid var(--color-noche);
+  background: var(--color-rio);
+  border: 3px solid var(--color-bruma);
   border-radius: 99px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-lima);
+  background: var(--color-tinta);
+}
+
+/* El ticket y la constancia se imprimen: papel blanco, tinta negra y sin
+   sombras macizas que se comen el tóner. */
+@media print {
+  body {
+    background-color: #fff;
+  }
+  .terreno::before,
+  .terreno::after {
+    display: none !important;
+  }
+  .tinta,
+  .tinta-sm,
+  .pulsable {
+    box-shadow: none !important;
+  }
+  article {
+    break-inside: avoid;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

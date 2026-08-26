@@ -1,14 +1,15 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 /**
  * Cortina de "estamos procesando".
  *
- * Hace falta porque el cobro tarda: guardar la tarjeta en Wompi, cobrar la
- * primera cuota y esperar a que el banco liquide son varios segundos con la
+ * Hace falta porque subir un comprobante desde el celular tarda: la foto de
+ * una transferencia son varios megas por una red móvil, y son segundos con la
  * página quieta. Sin esto el ciclista cree que el botón no hizo nada y vuelve
- * a darle — que es justo como se generan los cobros dobles.
+ * a darle — que es justo como se suben tres veces el mismo comprobante.
  *
  * Va por portal al <body> a propósito: cualquier ancestro con `transform`
  * — por ejemplo la animación de entrada de una tarjeta — convierte un
@@ -17,11 +18,14 @@ import { createPortal } from "react-dom";
 export function Procesando({
   visible,
   titulo = "Estamos procesando tu pago",
-  detalle = "Estamos hablando con tu banco. Puede tardar unos segundos.",
+  detalle = "Esto puede tardar unos segundos.",
+  children,
 }: {
   visible: boolean;
   titulo?: string;
   detalle?: string;
+  /** Ranura para una barra de progreso o cualquier detalle en vivo. */
+  children?: ReactNode;
 }) {
   // En el servidor no hay document; y como `visible` siempre arranca en falso,
   // el primer render del cliente también devuelve null: no hay desajuste de
@@ -32,19 +36,21 @@ export function Procesando({
     <div
       role="status"
       aria-live="assertive"
-      className="fixed inset-0 z-[100] grid place-items-center bg-noche/92 px-6 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] grid place-items-center bg-tinta/70 px-6 backdrop-blur-sm"
     >
-      <div className="flex max-w-sm flex-col items-center gap-5 rounded-3xl border-[3px] border-tinta bg-hueso px-8 py-9 text-center shadow-[10px_10px_0_0_var(--color-tinta)]">
+      <div className="flex max-w-sm flex-col items-center gap-5 rounded-3xl border-[3px] border-tinta bg-nube px-8 py-9 text-center shadow-[10px_10px_0_0_var(--color-tinta)]">
         <RuedaGirando />
 
         <div className="flex flex-col gap-2">
           <p className="font-display text-xl font-extrabold leading-tight tracking-tight text-tinta">
             {titulo}
           </p>
-          <p className="text-[0.9rem] leading-relaxed text-tinta/65">{detalle}</p>
+          <p className="text-[0.9rem] leading-relaxed text-tinta/75">{detalle}</p>
         </div>
 
-        <p className="raya-mono text-[0.68rem] font-bold uppercase tracking-[0.16em] text-tinta/40">
+        {children && <div className="w-full">{children}</div>}
+
+        <p className="raya-mono text-[0.68rem] font-bold uppercase tracking-[0.16em] text-tinta/75">
           No cierres esta ventana
         </p>
       </div>
@@ -74,7 +80,7 @@ function RuedaGirando() {
         cy="24"
         r="20"
         fill="none"
-        stroke="var(--color-lima)"
+        stroke="var(--color-rio)"
         strokeWidth="3.5"
         strokeLinecap="round"
         strokeDasharray="34 92"

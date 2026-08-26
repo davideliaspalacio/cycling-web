@@ -2,20 +2,33 @@ import Link from "next/link";
 import { Encabezado, Pie } from "@/components/marco";
 import { Cuenta, HeroAltimetria } from "@/components/hero-altimetria";
 import { BotonEnlace, Chip, Tarjeta, TituloSeccion } from "@/components/ui";
-import { CATEGORIAS, EVENTO, GRUPOS } from "@/lib/catalogo";
-import { pesos, repartirEnCuotas } from "@/lib/dinero";
+import {
+  CATEGORIAS,
+  CUENTAS_RECAUDO,
+  EVENTO,
+  FECHA_LIMITE_ABONOS,
+  GRUPOS,
+  MAX_ABONOS,
+  PRECIO_INSCRIPCION,
+  categoriasDeGrupo,
+  recorridoDe,
+} from "@/lib/catalogo";
+import { fechaLarga, pesos } from "@/lib/dinero";
 
 const CINTA = [
-  "92 KM",
-  "2.850 M D+",
-  "3.420 MSNM",
-  "900 CUPOS",
-  "15 CATEGORÍAS",
-  "4 CUOTAS SIN RECARGO",
+  EVENTO.tipo.toUpperCase(),
+  `${EVENTO.edicionOrdinal} EDICIÓN`,
+  EVENTO.lema,
+  EVENTO.lugar.toUpperCase(),
+  `${CATEGORIAS.length} CATEGORÍAS`,
+  `HASTA ${MAX_ABONOS} ABONOS`,
 ];
 
 export default function Inicio() {
-  const cuotas = repartirEnCuotas(750000);
+  // Los nombres de los destinos de recaudo salen del catálogo, que aquí corre
+  // en el servidor. Solo se anuncian las entidades: los números se entregan
+  // con la referencia de la inscripción, para que nadie transfiera sin ella.
+  const destinos = CUENTAS_RECAUDO.map((c) => c.entidad).join(" · ");
 
   return (
     <>
@@ -25,32 +38,34 @@ export default function Inicio() {
         {/* ------------------------------ Héroe ------------------------------ */}
         <section className="mx-auto w-full max-w-6xl px-4 pb-14 pt-12 sm:px-6 sm:pt-16">
           <div className="flex flex-wrap items-center gap-3">
-            <Chip tono="lima">{EVENTO.lema}</Chip>
-            <Chip tono="selva">
+            <Chip tono="turquesa">
+              {EVENTO.edicionOrdinal} Edición · {EVENTO.lema}
+            </Chip>
+            <Chip tono="rio">
               {EVENTO.fechaLegible} · {EVENTO.lugar}
             </Chip>
-            <span className="raya-mono text-[0.72rem] text-hueso/45">
+            <span className="raya-mono text-[0.72rem] text-tinta/75">
               Faltan <Cuenta hasta={EVENTO.fecha} />
             </span>
           </div>
 
-          <h1 className="mt-6 max-w-4xl font-display text-[clamp(2.7rem,8.2vw,5.6rem)] font-extrabold leading-[0.9] tracking-[-0.045em] text-hueso">
-            Nadie llega arriba
+          <h1 className="mt-6 max-w-4xl font-display text-[clamp(2.7rem,8.2vw,5.6rem)] font-extrabold leading-[0.9] tracking-[-0.045em] text-tinta">
+            Nadie hereda
             <br />
-            <span className="text-lima">por accidente.</span>
+            <span className="text-rio">un legado.</span>
           </h1>
 
-          <p className="mt-6 max-w-xl text-lg leading-relaxed text-hueso/70">
-            El Tibet Epic sube 2.850 metros en 92 kilómetros de páramo. Inscribirse
-            debería costar mucho menos esfuerzo que eso: cinco pasos, y pagas de
-            una o en cuatro cuotas.
+          <p className="mt-6 max-w-xl text-lg leading-relaxed text-tinta/75">
+            {EVENTO.etapas} etapas de XCM entre los caminos reales, la piedra y el
+            calor de {EVENTO.lugar}. Inscribirse debería costar mucho menos
+            esfuerzo que eso: cinco pasos, y pagas de una o en abonos.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <BotonEnlace href="/inscripcion" tamano="lg">
               Inscribirme
             </BotonEnlace>
-            <BotonEnlace href="#categorias" tono="selva" tamano="lg">
+            <BotonEnlace href="#categorias" tono="rio" tamano="lg">
               Ver categorías
             </BotonEnlace>
           </div>
@@ -61,14 +76,14 @@ export default function Inicio() {
         </section>
 
         {/* ------------------------------ Cinta ------------------------------ */}
-        <div className="overflow-hidden border-y-[3px] border-tinta bg-lima py-3">
+        <div className="overflow-hidden border-y-[3px] border-tinta bg-turquesa py-3">
           <div className="flex w-max animate-ticker gap-10 pr-10">
             {[...CINTA, ...CINTA, ...CINTA, ...CINTA].map((t, i) => (
               <span
                 key={i}
                 className="raya-mono whitespace-nowrap text-[0.82rem] font-bold uppercase tracking-[0.14em] text-tinta"
               >
-                {t} <span className="text-tinta/40">◆</span>
+                {t} <span className="text-tinta/75">◆</span>
               </span>
             ))}
           </div>
@@ -81,10 +96,11 @@ export default function Inicio() {
         >
           <TituloSeccion
             eyebrow="Elige dónde compites"
-            titulo="Quince categorías, un solo precio."
+            titulo={`${CATEGORIAS.length} categorías, un solo precio.`}
             bajada={
               <>
-                {pesos(750000)} para todas, de contado o en cuatro cuotas. La
+                {pesos(PRECIO_INSCRIPCION)} para todas, de una o en hasta{" "}
+                {MAX_ABONOS} abonos. La
                 organización verifica que tu edad coincida con la categoría antes
                 de confirmar el cupo.
               </>
@@ -94,17 +110,17 @@ export default function Inicio() {
           <div className="mt-10 flex flex-col gap-12">
             {GRUPOS.map((grupo) => (
               <div key={grupo.id}>
-                <div className="mb-5 flex items-baseline gap-3 border-b-[3px] border-dashed border-hueso/15 pb-3">
-                  <h3 className="font-display text-2xl font-extrabold tracking-tight text-hueso">
+                <div className="mb-5 flex items-baseline gap-3 border-b-[3px] border-dashed border-tinta/15 pb-3">
+                  <h3 className="font-display text-2xl font-extrabold tracking-tight text-tinta">
                     {grupo.titulo}
                   </h3>
-                  <span className="raya-mono text-[0.7rem] text-hueso/40">
+                  <span className="raya-mono text-[0.7rem] text-tinta/75">
                     {grupo.nota}
                   </span>
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {CATEGORIAS.filter((c) => c.grupo === grupo.id).map((cat, i) => (
+                  {categoriasDeGrupo(grupo.id).map((cat, i) => (
                     <Link
                       key={cat.codigo}
                       href={`/inscripcion?categoria=${cat.codigo}`}
@@ -112,31 +128,23 @@ export default function Inicio() {
                       style={{ animationDelay: `${i * 45}ms` }}
                     >
                       <Tarjeta
-                        tono={cat.destacada ? "lima" : "hueso"}
+                        tono="nube"
                         className="pulsable flex h-full flex-col gap-3 p-5"
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <h4 className="font-display text-xl font-extrabold leading-tight tracking-tight">
-                            {cat.nombre}
-                          </h4>
-                          {cat.destacada && (
-                            <span className="raya-mono shrink-0 rounded-full border-2 border-tinta bg-tinta px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-widest text-lima">
-                              Élite
-                            </span>
-                          )}
-                        </div>
+                        <h4 className="font-display text-xl font-extrabold leading-tight tracking-tight">
+                          {cat.nombre}
+                        </h4>
 
-                        <p className="flex-1 text-[0.86rem] leading-snug text-tinta/65">
+                        <p className="flex-1 text-[0.86rem] leading-snug text-tinta/75">
                           {cat.requisito}
                         </p>
 
                         <div className="flex items-center gap-3 border-t-2 border-dashed border-tinta/20 pt-3">
-                          <span className="raya-mono text-[0.72rem] font-bold text-tinta/70">
-                            {cat.km} KM
-                          </span>
-                          <span className="raya-mono text-[0.72rem] font-bold text-tinta/70">
-                            {cat.desnivel.toLocaleString("es-CO")} M D+
-                          </span>
+                          {recorridoDe(cat) && (
+                            <span className="raya-mono text-[0.72rem] font-bold uppercase text-tinta/75">
+                              {recorridoDe(cat)}
+                            </span>
+                          )}
                           <span className="ml-auto font-display text-base font-extrabold">
                             {pesos(cat.precio)}
                           </span>
@@ -157,28 +165,28 @@ export default function Inicio() {
         >
           <TituloSeccion
             eyebrow="Cómo se paga"
-            titulo="De una, o en cuatro cuotas."
-            bajada="El plan de cuotas guarda tu tarjeta con Wompi y cobra solo el día 5 de cada mes. No hay intereses, no hay papeleo, y puedes adelantar cuando quieras."
+            titulo="De una, o en abonos."
+            bajada={`Transferencia a ${destinos}. Subes el comprobante y la organización lo verifica contra el extracto. Sin tarjeta, sin recargo y sin cobros automáticos: nadie te toca la cuenta.`}
           />
 
           <div className="mt-10 grid gap-5 md:grid-cols-2">
-            <Tarjeta tono="hueso" className="flex flex-col gap-4 p-7">
-              <Chip tono="selva">Pago de contado</Chip>
+            <Tarjeta tono="nube" className="flex flex-col gap-4 p-7">
+              <Chip tono="rio">Pago total</Chip>
               <p className="font-display text-[2.6rem] font-extrabold leading-none tracking-tight">
-                {pesos(750000)}
+                {pesos(PRECIO_INSCRIPCION)}
               </p>
-              <p className="text-[0.95rem] leading-relaxed text-tinta/70">
-                Un solo pago con tarjeta, PSE, Nequi o corresponsal bancario. El
-                cupo queda confirmado apenas Wompi aprueba la transacción.
+              <p className="text-[0.95rem] leading-relaxed text-tinta/75">
+                Una sola transferencia y listo. El cupo queda confirmado en
+                cuanto verifiquemos tu comprobante.
               </p>
               <ul className="mt-1 flex flex-col gap-2 text-[0.88rem] text-tinta/75">
                 {[
-                  "Confirmación por correo en menos de un minuto",
-                  "Reembolso del 70 % hasta el 1 de abril de 2027",
-                  "Todos los medios de pago de Wompi",
+                  `Transfieres por ${destinos}`,
+                  "Subes la foto o el PDF del comprobante",
+                  "Sin reembolsos: la inscripción admite cambio de competidor",
                 ].map((t) => (
                   <li key={t} className="flex gap-2">
-                    <span className="mt-[0.35rem] h-2 w-2 shrink-0 rounded-full bg-lima ring-2 ring-tinta" />
+                    <span className="mt-[0.35rem] h-2 w-2 shrink-0 rounded-full bg-turquesa ring-2 ring-tinta" />
                     {t}
                   </li>
                 ))}
@@ -188,63 +196,65 @@ export default function Inicio() {
               </BotonEnlace>
             </Tarjeta>
 
-            <Tarjeta tono="naranja" className="flex flex-col gap-4 p-7">
-              <Chip tono="hueso">Plan de 4 cuotas</Chip>
+            <Tarjeta tono="sol" className="flex flex-col gap-4 p-7">
+              <Chip tono="nube">Hasta {MAX_ABONOS} abonos</Chip>
               <p className="font-display text-[2.6rem] font-extrabold leading-none tracking-tight">
-                {pesos(cuotas[0])}
-                <span className="ml-1 align-middle font-sans text-base font-bold tracking-normal">
-                  /mes
-                </span>
+                Monto libre
               </p>
               <p className="text-[0.95rem] leading-relaxed text-tinta/75">
-                Reservas el cupo con la primera cuota hoy. Las tres siguientes se
-                cobran solas el día 5 de cada mes. Suman {pesos(750000)} exactos —
-                sin un peso de recargo.
+                Reservas el cupo con el primer abono y completas cuando puedas,
+                en máximo {MAX_ABONOS} transferencias. Suman{" "}
+                {pesos(PRECIO_INSCRIPCION)} exactos — sin un peso de recargo.
               </p>
 
               <ol className="mt-1 flex flex-col gap-1.5">
-                {cuotas.map((monto, i) => (
+                {[
+                  "Transfieres lo que puedas",
+                  "Subes el comprobante de ese abono",
+                  "Tu saldo baja cuando lo verificamos",
+                ].map((paso, i) => (
                   <li
-                    key={i}
-                    className="flex items-center gap-3 rounded-xl border-[2.5px] border-tinta bg-hueso/80 px-3 py-2"
+                    key={paso}
+                    className="flex items-center gap-3 rounded-xl border-[2.5px] border-tinta bg-nube/80 px-3 py-2"
                   >
-                    <span className="raya-mono text-[0.7rem] font-bold text-tinta/55">
-                      C{i + 1}
+                    <span className="raya-mono text-[0.7rem] font-bold text-tinta/75">
+                      0{i + 1}
                     </span>
                     <span className="text-[0.84rem] font-medium text-tinta/75">
-                      {i === 0 ? "Hoy, al inscribirte" : `Día 5, mes ${i + 1}`}
-                    </span>
-                    <span className="raya-mono ml-auto text-[0.88rem] font-bold">
-                      {pesos(monto)}
+                      {paso}
                     </span>
                   </li>
                 ))}
               </ol>
 
+              <p className="raya-mono text-[0.72rem] font-bold uppercase tracking-[0.1em] text-tinta/75">
+                Último día para abonar: {fechaLarga(FECHA_LIMITE_ABONOS)}
+              </p>
+
               <BotonEnlace
                 href="/inscripcion"
-                tono="hueso"
+                tono="nube"
                 className="mt-auto self-start"
               >
-                Reservar con la primera cuota
+                Reservar con el primer abono
               </BotonEnlace>
             </Tarjeta>
           </div>
 
-          <Tarjeta tono="selva" className="mt-5 flex flex-col gap-4 p-7 sm:flex-row sm:items-center">
+          <Tarjeta tono="marea" className="mt-5 flex flex-col gap-4 p-7 sm:flex-row sm:items-center">
             <div className="flex-1">
-              <h3 className="font-display text-xl font-extrabold tracking-tight text-hueso">
+              <h3 className="font-display text-xl font-extrabold tracking-tight text-tinta">
                 Siempre sabes cuánto te falta.
               </h3>
-              <p className="mt-2 max-w-2xl text-[0.92rem] leading-relaxed text-hueso/65">
-                Cada cobro te llega por correo con el comprobante, el saldo
-                restante y la fecha del siguiente. Tres días antes de cada cuota
-                te avisamos, y si el banco rechaza el cobro te lo decimos con el
-                motivo y un enlace para pagar con otro medio.
+              <p className="mt-2 max-w-2xl text-[0.92rem] leading-relaxed text-tinta/75">
+                Tu página de inscripción muestra el historial de abonos con su
+                estado —enviado, en revisión, verificado o rechazado—, cuánto
+                llevas y cuánto queda. Si rechazamos un comprobante te decimos
+                por qué y puedes volver a subirlo: el cupo no se pierde.
               </p>
             </div>
-            <BotonEnlace href="/correos" tono="lima" className="shrink-0">
-              Ver los correos
+            <BotonEnlace href="/mi-inscripcion" tono="turquesa" className="shrink-0">
+              Ver mi inscripción
             </BotonEnlace>
           </Tarjeta>
         </section>

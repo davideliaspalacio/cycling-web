@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { buscarInscripcion, inscripcionPorReferencia } from "@/lib/almacen";
 import { categoriaPorCodigo } from "@/lib/catalogo";
-import { proximaCuota, saldoPendiente } from "@/lib/dinero";
+import { proximaCuota } from "@/lib/dinero";
 import type { Inscripcion } from "@/lib/tipos";
 
 const esquema = z.union([
@@ -39,7 +39,12 @@ export function vistaPublica(ins: Inscripcion) {
     tallas: ins.tallas,
     total: ins.total,
     pagado: ins.pagado,
-    saldo: saldoPendiente(ins.cuotas),
+    /*
+     * El saldo sale de `total − pagado`, no de sumar cuotas pendientes: una
+     * inscripción por abonos no tiene filas en `cuotas`, así que la versión
+     * anterior le informaba saldo cero a quien todavía debía.
+     */
+    saldo: Math.max(0, ins.total - ins.pagado),
     cuotas: ins.cuotas,
     proxima: proximaCuota(ins.cuotas) ?? null,
     tarjeta: ins.tarjetaResumen ?? null,

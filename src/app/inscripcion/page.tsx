@@ -1,10 +1,14 @@
 import { Encabezado } from "@/components/marco";
 import { FormularioInscripcion } from "@/components/formulario/inscripcion";
-import { categoriaPorCodigo } from "@/lib/catalogo";
-import { MODO } from "@/lib/wompi";
+import {
+  CUENTAS_RECAUDO,
+  FECHA_LIMITE_ABONOS,
+  NOMBRE_COMPLETO,
+  categoriaPorCodigo,
+} from "@/lib/catalogo";
 
 export const metadata = {
-  title: "Inscripción — Tibet Epic XCM 2027",
+  title: `Inscripción — ${NOMBRE_COMPLETO}`,
 };
 
 export default async function PaginaInscripcion({
@@ -18,7 +22,17 @@ export default async function PaginaInscripcion({
     <>
       <Encabezado compacto />
       <main className="flex-1">
-        <FormularioInscripcion categoriaInicial={valida} modoWompi={MODO} />
+        {/*
+          `CUENTAS_RECAUDO` se lee AQUÍ, en el servidor: sus números vienen de
+          variables de entorno sin `NEXT_PUBLIC_`. Si el formulario las
+          importara por su cuenta, el navegador vería el respaldo escrito en el
+          repositorio y no la cuenta que configuró la organización.
+        */}
+        <FormularioInscripcion
+          categoriaInicial={valida}
+          cuentas={CUENTAS_RECAUDO}
+          fechaLimite={FECHA_LIMITE_ABONOS}
+        />
       </main>
     </>
   );

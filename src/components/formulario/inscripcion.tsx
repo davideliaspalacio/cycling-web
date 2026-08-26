@@ -5,16 +5,23 @@ import { useRouter } from "next/navigation";
 import { PerfilDeEtapa, type Hito } from "@/components/perfil-de-etapa";
 import { Boton, Campo, Tarjeta } from "@/components/ui";
 import {
-  CATEGORIAS,
+  ANIO_CARRERA,
+  EMBAJADORES,
+  EVENTO,
   GRUPOS,
   MUNICIPIOS,
-  REFERIDORES,
+  OTRO_EMBAJADOR,
+  PRECIO_INSCRIPCION,
+  PRENDAS,
   TALLAS,
   TIPOS_RH,
   categoriaPorCodigo,
+  categoriasDeGrupo,
+  recorridoDe,
 } from "@/lib/catalogo";
 import { pesos } from "@/lib/dinero";
 import { avisoDeCategoria, esquemaCiclista, esquemaTallas } from "@/lib/validacion";
+import type { CuentaRecaudo } from "@/lib/catalogo";
 import type { DatosCiclista, Tallas as TipoTallas } from "@/lib/tipos";
 import { PasoPago } from "./paso-pago";
 import { MEDIDAS, TextosLegales } from "./legales";
@@ -22,9 +29,9 @@ import { MEDIDAS, TextosLegales } from "./legales";
 const HITOS: Hito[] = [
   { titulo: "Categoría", km: 0 },
   { titulo: "Tus datos", km: 23 },
-  { titulo: "Tallas", km: 46 },
-  { titulo: "Permisos", km: 69 },
-  { titulo: "Pago", km: 92 },
+  { titulo: "Tallas", km: 45 },
+  { titulo: "Permisos", km: 68 },
+  { titulo: "Pago", km: 90 },
 ];
 
 const CICLISTA_VACIO: DatosCiclista = {
@@ -35,8 +42,6 @@ const CICLISTA_VACIO: DatosCiclista = {
   eps: "",
   correo: "",
   telefono: "",
-  equipo: "",
-  instagram: "",
   contactoEmergencia: "",
   telefonoEmergencia: "",
   direccion: "",
@@ -52,10 +57,18 @@ type Errores = Record<string, string>;
 
 export function FormularioInscripcion({
   categoriaInicial,
-  modoWompi,
+  cuentas,
+  fechaLimite,
 }: {
   categoriaInicial?: string;
-  modoWompi: "simulacion" | "sandbox" | "produccion";
+  /**
+   * Las cuentas de recaudo, resueltas en el servidor. No se importan aquí
+   * porque salen de variables de entorno sin `NEXT_PUBLIC_`: en el navegador
+   * valdrían el respaldo del repositorio y no la cuenta configurada.
+   */
+  cuentas: CuentaRecaudo[];
+  /** Último día para subir comprobantes (ISO). */
+  fechaLimite: string;
 }) {
   const router = useRouter();
   const [paso, setPaso] = useState(categoriaInicial ? 1 : 0);
@@ -63,7 +76,7 @@ export function FormularioInscripcion({
   const [ciclista, setCiclista] = useState<DatosCiclista>(CICLISTA_VACIO);
   const [tallas, setTallas] = useState<TipoTallas>({ jersey: "", running: "" });
   const [consentimientos, setConsentimientos] = useState({
-    reembolso: false,
+    politicaPago: false,
     datos: false,
     exoneracion: false,
   });
@@ -230,7 +243,8 @@ export function FormularioInscripcion({
             categoria={categoria}
             ciclista={ciclista}
             tallas={tallas}
-            modoWompi={modoWompi}
+            cuentas={cuentas}
+            fechaLimite={fechaLimite}
             onCompletado={() => router.push(`/mi-inscripcion?ref=${referencia}`)}
           />
         )}
@@ -239,7 +253,7 @@ export function FormularioInscripcion({
       {errorGeneral && (
         <p
           role="alert"
-          className="mt-5 rounded-2xl border-[3px] border-tinta bg-magenta px-4 py-3 font-display text-sm font-bold text-tinta"
+          className="mt-5 rounded-2xl border-[3px] border-tinta bg-alerta px-4 py-3 font-display text-sm font-bold text-nube"
         >
           {errorGeneral}
         </p>
@@ -248,7 +262,7 @@ export function FormularioInscripcion({
       {paso < 4 && (
         <div className="mt-8 flex items-center justify-between gap-4">
           <Boton
-            tono="selva"
+            tono="rio"
             onClick={() => irA(Math.max(0, paso - 1))}
             disabled={paso === 0}
           >
@@ -257,7 +271,7 @@ export function FormularioInscripcion({
 
           <div className="flex items-center gap-4">
             {categoria && (
-              <span className="raya-mono hidden text-[0.75rem] text-hueso/50 sm:block">
+              <span className="raya-mono hidden text-[0.75rem] text-tinta/75 sm:block">
                 {categoria.nombre} · {pesos(categoria.precio)}
               </span>
             )}
@@ -265,7 +279,7 @@ export function FormularioInscripcion({
               {enviando
                 ? "Guardando…"
                 : paso === 3
-                  ? "Ir a pagar →"
+                  ? "Ir al pago →"
                   : "Siguiente →"}
             </Boton>
           </div>
@@ -286,28 +300,29 @@ function PasoCategoria({
 }) {
   return (
     <section>
-      <h1 className="font-display text-[clamp(1.8rem,5vw,2.7rem)] font-extrabold leading-none tracking-[-0.035em] text-hueso">
+      <h1 className="font-display text-[clamp(1.8rem,5vw,2.7rem)] font-extrabold leading-none tracking-[-0.035em] text-tinta">
         ¿Dónde compites?
       </h1>
-      <p className="mt-3 max-w-xl text-[0.98rem] leading-relaxed text-hueso/65">
-        Todas cuestan {pesos(750000)}. La organización revisa que tu edad al 31 de
-        diciembre de 2027 coincida con la categoría antes de confirmar el cupo.
+      <p className="mt-3 max-w-xl text-[0.98rem] leading-relaxed text-tinta/75">
+        Todas cuestan {pesos(PRECIO_INSCRIPCION)}. La organización revisa que tu
+        edad al 31 de diciembre de {ANIO_CARRERA} coincida con la categoría antes
+        de confirmar el cupo.
       </p>
 
       <div className="mt-8 flex flex-col gap-8">
         {GRUPOS.map((grupo) => (
           <fieldset key={grupo.id} className="border-0 p-0">
-            <legend className="mb-3 font-display text-xl font-extrabold tracking-tight text-hueso">
+            <legend className="mb-3 font-display text-xl font-extrabold tracking-tight text-tinta">
               {grupo.titulo}
             </legend>
             <div className="grid gap-3 sm:grid-cols-2">
-              {CATEGORIAS.filter((c) => c.grupo === grupo.id).map((cat) => {
+              {categoriasDeGrupo(grupo.id).map((cat) => {
                 const activa = seleccionada === cat.codigo;
                 return (
                   <label
                     key={cat.codigo}
                     className={`pulsable flex cursor-pointer gap-3 rounded-2xl border-[3px] border-tinta p-4 shadow-[4px_4px_0_0_var(--color-tinta)] transition-colors ${
-                      activa ? "bg-lima" : "bg-hueso"
+                      activa ? "bg-turquesa" : "bg-nube"
                     }`}
                   >
                     <input
@@ -320,20 +335,22 @@ function PasoCategoria({
                     />
                     <span
                       aria-hidden
-                      className={`mt-1 grid h-5 w-5 shrink-0 place-items-center rounded-full border-[3px] border-tinta ${activa ? "bg-tinta" : "bg-white"}`}
+                      className={`mt-1 grid h-5 w-5 shrink-0 place-items-center rounded-full border-[3px] border-tinta ${activa ? "bg-tinta" : "bg-nube"}`}
                     >
-                      {activa && <span className="h-1.5 w-1.5 rounded-full bg-lima" />}
+                      {activa && <span className="h-1.5 w-1.5 rounded-full bg-turquesa" />}
                     </span>
                     <span className="min-w-0">
                       <span className="block font-display text-base font-extrabold leading-tight text-tinta">
                         {cat.nombre}
                       </span>
-                      <span className="mt-1 block text-[0.82rem] leading-snug text-tinta/65">
+                      <span className="mt-1 block text-[0.82rem] leading-snug text-tinta/75">
                         {cat.requisito}
                       </span>
-                      <span className="raya-mono mt-2 block text-[0.68rem] font-bold text-tinta/55">
-                        {cat.km} KM · {cat.desnivel.toLocaleString("es-CO")} M D+
-                      </span>
+                      {recorridoDe(cat) && (
+                        <span className="raya-mono mt-2 block text-[0.68rem] font-bold uppercase text-tinta/75">
+                          {recorridoDe(cat)}
+                        </span>
+                      )}
                     </span>
                   </label>
                 );
@@ -359,6 +376,12 @@ function PasoDatos({
   aviso: string | null;
   onCambio: (campo: keyof DatosCiclista, valor: string) => void;
 }) {
+  // Al volver de otro paso el valor escrito a mano es la única pista de que
+  // el ciclista había elegido "Otro".
+  const [otroEmbajador, setOtroEmbajador] = useState(
+    () => !!ciclista.referidoPor && !EMBAJADORES.includes(ciclista.referidoPor),
+  );
+
   const entrada = (
     campo: keyof DatosCiclista,
     props: React.InputHTMLAttributes<HTMLInputElement> = {},
@@ -375,13 +398,13 @@ function PasoDatos({
   );
 
   return (
-    <Tarjeta tono="hueso" className="p-6 sm:p-8">
+    <Tarjeta tono="nube" className="p-6 sm:p-8">
       <h1 className="font-display text-[clamp(1.6rem,4.4vw,2.3rem)] font-extrabold leading-none tracking-[-0.03em] text-tinta">
         Cuéntanos quién eres
       </h1>
-      <p className="mt-2 text-[0.92rem] leading-relaxed text-tinta/65">
+      <p className="mt-2 text-[0.92rem] leading-relaxed text-tinta/75">
         Estos datos van al dorsal, al seguro y al brazalete médico. Los campos con{" "}
-        <span className="text-magenta">*</span> son obligatorios.
+        <span className="text-alerta">*</span> son obligatorios.
       </p>
 
       <div className="mt-7 grid gap-5 sm:grid-cols-2">
@@ -444,7 +467,7 @@ function PasoDatos({
         </Campo>
 
         <div className="sm:col-span-2">
-          <Campo id="direccion" etiqueta="Dirección" obligatorio error={errores.direccion} ayuda="Para enviarte el kit si no lo recoges en Tibetá.">
+          <Campo id="direccion" etiqueta="Dirección" obligatorio error={errores.direccion} ayuda={`Para enviarte el kit si no lo recoges en ${EVENTO.lugar}.`}>
             {entrada("direccion", { autoComplete: "street-address" })}
           </Campo>
         </div>
@@ -459,30 +482,44 @@ function PasoDatos({
         <Campo id="eps" etiqueta="EPS" ayuda="Opcional, pero acelera la atención médica en ruta.">
           {entrada("eps")}
         </Campo>
-        <Campo id="equipo" etiqueta="Equipo o club">
-          {entrada("equipo", { placeholder: "Independiente" })}
-        </Campo>
 
-        <Campo id="instagram" etiqueta="Instagram">
-          {entrada("instagram", { placeholder: "@tuusuario" })}
-        </Campo>
-        <Campo id="referidoPor" etiqueta="¿Cómo llegaste al Tibet Epic?">
-          <select
-            id="referidoPor"
-            className="campo"
-            value={ciclista.referidoPor}
-            onChange={(e) => onCambio("referidoPor", e.target.value)}
-          >
-            <option value="">Prefiero no decir</option>
-            {REFERIDORES.map((r) => (
-              <option key={r}>{r}</option>
-            ))}
-          </select>
+        <Campo
+          id="referidoPor"
+          etiqueta="Embajador o comunidad"
+          ayuda="Quién te trajo a la carrera. Opcional."
+        >
+          <>
+            <select
+              id="referidoPor"
+              className="campo"
+              value={otroEmbajador ? OTRO_EMBAJADOR : ciclista.referidoPor}
+              onChange={(e) => {
+                const elegido = e.target.value;
+                setOtroEmbajador(elegido === OTRO_EMBAJADOR);
+                onCambio("referidoPor", elegido === OTRO_EMBAJADOR ? "" : elegido);
+              }}
+            >
+              <option value="">Prefiero no decir</option>
+              {EMBAJADORES.map((r) => (
+                <option key={r}>{r}</option>
+              ))}
+              <option>{OTRO_EMBAJADOR}</option>
+            </select>
+            {otroEmbajador && (
+              <input
+                className="campo mt-2"
+                aria-label="Nombre de la comunidad"
+                placeholder="Escribe el nombre de la comunidad"
+                value={ciclista.referidoPor}
+                onChange={(e) => onCambio("referidoPor", e.target.value)}
+              />
+            )}
+          </>
         </Campo>
       </div>
 
       {aviso && (
-        <p className="mt-6 rounded-2xl border-[3px] border-tinta bg-naranja px-4 py-3 text-[0.88rem] font-semibold leading-snug text-tinta">
+        <p className="mt-6 rounded-2xl border-[3px] border-tinta bg-sol px-4 py-3 text-[0.88rem] font-semibold leading-snug text-tinta">
           {aviso}
         </p>
       )}
@@ -502,12 +539,12 @@ function PasoTallas({
   onCambio: (campo: keyof TipoTallas, valor: string) => void;
 }) {
   return (
-    <Tarjeta tono="hueso" className="p-6 sm:p-8">
+    <Tarjeta tono="nube" className="p-6 sm:p-8">
       <h1 className="font-display text-[clamp(1.6rem,4.4vw,2.3rem)] font-extrabold leading-none tracking-[-0.03em] text-tinta">
         Tu kit
       </h1>
-      <p className="mt-2 text-[0.92rem] leading-relaxed text-tinta/65">
-        Jersey de carrera y camiseta de podio, corte{" "}
+      <p className="mt-2 text-[0.92rem] leading-relaxed text-tinta/75">
+        Las {PRENDAS.length} prendas del kit, corte{" "}
         {sexo === "Femenino" ? "femenino" : "masculino"}. Mídete sobre la piel, sin
         apretar. Si estás entre dos tallas, sube una: el jersey es ajustado.
       </p>
@@ -523,7 +560,7 @@ function PasoTallas({
                 <th
                   key={t}
                   scope="col"
-                  className="py-2 font-mono text-[0.68rem] font-bold uppercase tracking-[0.14em] text-tinta/60"
+                  className="py-2 font-mono text-[0.68rem] font-bold uppercase tracking-[0.14em] text-tinta/75"
                 >
                   {t}
                 </th>
@@ -536,13 +573,13 @@ function PasoTallas({
               return (
                 <tr
                   key={m.talla}
-                  className={`border-b-2 border-dashed border-tinta/20 transition-colors ${activa ? "bg-lima" : ""}`}
+                  className={`border-b-2 border-dashed border-tinta/20 transition-colors ${activa ? "bg-turquesa" : ""}`}
                 >
                   <th
                     scope="row"
                     className="py-2.5 font-display text-[0.95rem] font-extrabold text-tinta"
                   >
-                    <span className="raya-mono mr-1.5 text-[0.7rem] text-tinta/45">
+                    <span className="raya-mono mr-1.5 text-[0.7rem] text-tinta/75">
                       {m.numero}
                     </span>
                     {m.talla}
@@ -560,15 +597,10 @@ function PasoTallas({
       </div>
 
       <div className="mt-8 grid gap-6 sm:grid-cols-2">
-        {(
-          [
-            ["jersey", "Jersey de carrera"],
-            ["running", "Camiseta de podio"],
-          ] as const
-        ).map(([campo, etiqueta]) => (
+        {PRENDAS.map(({ campo, nombre }) => (
           <fieldset key={campo} className="border-0 p-0">
             <legend className="mb-2 font-display text-[0.8rem] font-bold uppercase tracking-[0.1em] text-tinta">
-              {etiqueta} <span className="text-magenta">*</span>
+              {nombre} <span className="text-alerta">*</span>
             </legend>
             <div className="flex flex-wrap gap-2">
               {TALLAS.map((t) => {
@@ -577,7 +609,7 @@ function PasoTallas({
                   <label
                     key={t}
                     className={`pulsable cursor-pointer rounded-xl border-[3px] border-tinta px-4 py-2.5 font-display text-sm font-extrabold shadow-[3px_3px_0_0_var(--color-tinta)] ${
-                      activa ? "bg-lima text-tinta" : "bg-white text-tinta/70"
+                      activa ? "bg-turquesa text-tinta" : "bg-nube text-tinta/75"
                     }`}
                   >
                     <input
@@ -606,16 +638,19 @@ function PasoPermisos({
   valores,
   onCambio,
 }: {
-  valores: { reembolso: boolean; datos: boolean; exoneracion: boolean };
-  onCambio: (campo: "reembolso" | "datos" | "exoneracion", valor: boolean) => void;
+  valores: { politicaPago: boolean; datos: boolean; exoneracion: boolean };
+  onCambio: (
+    campo: "politicaPago" | "datos" | "exoneracion",
+    valor: boolean,
+  ) => void;
 }) {
   return (
     <section className="flex flex-col gap-4">
       <div>
-        <h1 className="font-display text-[clamp(1.6rem,4.4vw,2.3rem)] font-extrabold leading-none tracking-[-0.03em] text-hueso">
+        <h1 className="font-display text-[clamp(1.6rem,4.4vw,2.3rem)] font-extrabold leading-none tracking-[-0.03em] text-tinta">
           Las letras pequeñas
         </h1>
-        <p className="mt-3 max-w-xl text-[0.95rem] leading-relaxed text-hueso/65">
+        <p className="mt-3 max-w-xl text-[0.95rem] leading-relaxed text-tinta/75">
           Tres textos que la ley y el reglamento nos exigen. Están completos, sin
           recortes: léelos y acepta cada uno.
         </p>

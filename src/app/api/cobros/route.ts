@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { listarInscripciones } from "@/lib/almacen";
-import { barrerCobros } from "@/lib/servicio";
+import { barrerRecordatorios } from "@/lib/servicio";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -18,6 +18,6 @@ export async function GET(peticion: Request) {
   }
 
   const inscripciones = await listarInscripciones();
-  const resumen = await barrerCobros(inscripciones);
+  const resumen = await barrerRecordatorios(inscripciones);
   return NextResponse.json({ corridaEn: new Date().toISOString(), ...resumen });
 }

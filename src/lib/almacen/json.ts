@@ -1,7 +1,7 @@
 import "server-only";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { CorreoEnviado, Inscripcion } from "../tipos";
+import type { Abono, CorreoEnviado, Inscripcion } from "../tipos";
 
 /**
  * Almacén en archivo JSON — el respaldo para cuando no hay DATABASE_URL.
@@ -15,6 +15,7 @@ import type { CorreoEnviado, Inscripcion } from "../tipos";
 const DIR = path.join(process.cwd(), ".datos");
 const ARCHIVO_INSCRIPCIONES = path.join(DIR, "inscripciones.json");
 const ARCHIVO_CORREOS = path.join(DIR, "correos.json");
+const ARCHIVO_ABONOS = path.join(DIR, "abonos.json");
 
 type Tabla<T> = { registros: T[] };
 
@@ -123,6 +124,109 @@ export async function reclamarCuota(
     cuota.ultimoIntentoEn = new Date().toISOString();
     await escribir(ARCHIVO_INSCRIPCIONES, tabla);
     return { intentos: cuota.intentos };
+  });
+}
+
+/* ------------------------------------- Abonos -------------------------------------- */
+
+/**
+ * Los abonos van en su propio archivo, no dentro de la inscripción.
+ *
+ * Es el mismo criterio que en Postgres: guardar una inscripción no puede
+ * arrastrar ni pisar las evidencias y su historial de revisión. Aquí además
+ * hay una razón práctica — `guardarInscripcion` reescribe el registro completo
+ * desde un objeto en memoria, y un objeto que se leyó antes de la revisión la
+ * borraría al volver a guardarse.
+ */
+
+export async function crearAbono(abono: Abono): Promise<Abono> {
+  return enFila(async () => {
+    const tabla = await leer<Abono>(ARCHIVO_ABONOS);
+    tabla.registros.push(abono);
+    await escribir(ARCHIVO_ABONOS, tabla);
+    return abono;
+  });
+}
+
+export async function abonosDe(inscripcionId: string): Promise<Abono[]> {
+  const { registros } = await leer<Abono>(ARCHIVO_ABONOS);
+  return registros
+    .filter((a) => a.inscripcionId === inscripcionId)
+    .sort((a, b) => b.creadoEn.localeCompare(a.creadoEn));
+}
+
+export async function abonoPorId(id: string): Promise<Abono | undefined> {
+  const { registros } = await leer<Abono>(ARCHIVO_ABONOS);
+  return registros.find((a) => a.id === id);
+}
+
+export async function abonosPorRevisar(limite = 100): Promise<Abono[]> {
+  const { registros } = await leer<Abono>(ARCHIVO_ABONOS);
+  return registros
+    .filter((a) => a.estado === "ENVIADA" || a.estado === "EN_REVISION")
+    .sort((a, b) => a.creadoEn.localeCompare(b.creadoEn))
+    .slice(0, limite);
+}
+
+export async function abonosConMismaEvidencia(
+  sha256: string,
+  exceptoId?: string,
+): Promise<Abono[]> {
+  const { registros } = await leer<Abono>(ARCHIVO_ABONOS);
+  return registros
+    .filter((a) => a.evidenciaSha256 === sha256 && a.id !== exceptoId)
+    .sort((a, b) => a.creadoEn.localeCompare(b.creadoEn));
+}
+
+/**
+ * Equivalente al reclamo atómico de Postgres, pero aquí no hay transacciones:
+ * es best-effort, igual que `reclamarCuota`. Otra razón para no usar este
+ * almacén en producción.
+ */
+export async function reclamarAbono(
+  id: string,
+  revisadoPor?: string,
+  minutosAbandono = 15,
+): Promise<Abono | null> {
+  return enFila(async () => {
+    const tabla = await leer<Abono>(ARCHIVO_ABONOS);
+    const abono = tabla.registros.find((a) => a.id === id);
+    if (!abono) return null;
+    const abandonado =
+      abono.estado === "EN_REVISION" &&
+      (!abono.revisadoEn ||
+        Date.now() - new Date(abono.revisadoEn).getTime() >
+          minutosAbandono * 60_000);
+    if (abono.estado !== "ENVIADA" && !abandonado) return null;
+    abono.estado = "EN_REVISION";
+    abono.revisadoEn = new Date().toISOString();
+    if (revisadoPor) abono.revisadoPor = revisadoPor;
+    await escribir(ARCHIVO_ABONOS, tabla);
+    return abono;
+  });
+}
+
+export async function resolverAbono(params: {
+  id: string;
+  estado: Extract<Abono["estado"], "VERIFICADA" | "RECHAZADA">;
+  montoAprobado?: number;
+  motivoRechazo?: string;
+  revisadoPor: string;
+}): Promise<Abono | null> {
+  return enFila(async () => {
+    const tabla = await leer<Abono>(ARCHIVO_ABONOS);
+    const abono = tabla.registros.find((a) => a.id === params.id);
+    if (!abono) return null;
+    if (abono.estado !== "ENVIADA" && abono.estado !== "EN_REVISION") return null;
+    abono.estado = params.estado;
+    abono.montoAprobado =
+      params.estado === "VERIFICADA" ? params.montoAprobado : undefined;
+    abono.motivoRechazo =
+      params.estado === "RECHAZADA" ? params.motivoRechazo : undefined;
+    abono.revisadoPor = params.revisadoPor;
+    abono.revisadoEn = new Date().toISOString();
+    await escribir(ARCHIVO_ABONOS, tabla);
+    return abono;
   });
 }
 

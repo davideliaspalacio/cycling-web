@@ -1,6 +1,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { HAY_BASE_DE_DATOS } from "../db";
+import { EVENTO } from "../catalogo";
 import * as json from "./json";
 import * as postgres from "./postgres";
 
@@ -27,7 +28,7 @@ if (MOTOR === "json") {
 
 export function nuevaReferencia(): string {
   const sufijo = randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase();
-  return `TE27-${sufijo}`;
+  return `${EVENTO.prefijoReferencia}-${sufijo}`;
 }
 
 export const listarInscripciones = impl.listarInscripciones;
@@ -37,6 +38,17 @@ export const inscripcionPorReferencia = impl.inscripcionPorReferencia;
 export const inscripcionPorId = impl.inscripcionPorId;
 export const buscarInscripcion = impl.buscarInscripcion;
 export const inscripcionDuplicada = impl.inscripcionDuplicada;
+// Abonos: cada uno tiene su propia función. Nunca pasan por
+// `guardarInscripcion`, que reemplaza las cuotas en bloque y se llevaría por
+// delante la evidencia y el historial de revisión.
+export const crearAbono = impl.crearAbono;
+export const abonosDe = impl.abonosDe;
+export const abonoPorId = impl.abonoPorId;
+export const abonosPorRevisar = impl.abonosPorRevisar;
+export const abonosConMismaEvidencia = impl.abonosConMismaEvidencia;
+export const reclamarAbono = impl.reclamarAbono;
+export const resolverAbono = impl.resolverAbono;
+
 export const registrarCorreo = impl.registrarCorreo;
 export const listarCorreos = impl.listarCorreos;
 export const correoPorId = impl.correoPorId;

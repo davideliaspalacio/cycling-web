@@ -1,7 +1,7 @@
 import "server-only";
 import type { PoolClient } from "pg";
 import { consultar, enTransaccion } from "../db";
-import type { CorreoEnviado, Cuota, Inscripcion } from "../tipos";
+import type { Abono, CorreoEnviado, Cuota, Inscripcion } from "../tipos";
 
 /**
  * Almacén en Postgres. Es la implementación de producción.
@@ -24,6 +24,7 @@ type FilaInscripcion = {
   tallas: Inscripcion["tallas"];
   consentimientos: Inscripcion["consentimientos"];
   plan: string;
+  medio_pago: string;
   total: number;
   pagado: number;
   fuente_pago_id: string | null;
@@ -75,6 +76,9 @@ function aInscripcion(f: FilaInscripcion, cuotas: Cuota[]): Inscripcion {
     tallas: f.tallas,
     consentimientos: f.consentimientos,
     plan: f.plan as Inscripcion["plan"],
+    // Las filas anteriores al pago manual no tienen columna llena en un
+    // volcado viejo; WOMPI es lo que eran.
+    medioPago: (f.medio_pago ?? "WOMPI") as Inscripcion["medioPago"],
     total: f.total,
     pagado: f.pagado,
     cuotas: cuotas.sort((a, b) => a.numero - b.numero),
@@ -132,8 +136,9 @@ export async function guardarInscripcion(
       `INSERT INTO inscripciones (
          id, referencia, creada_en, actualizada_en, estado, categoria_codigo,
          ciclista, tallas, consentimientos, plan, total, pagado,
-         fuente_pago_id, tarjeta_resumen, eventos, autorizacion_cobro
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+         fuente_pago_id, tarjeta_resumen, eventos, autorizacion_cobro,
+         medio_pago
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
        ON CONFLICT (id) DO UPDATE SET
          actualizada_en  = EXCLUDED.actualizada_en,
          estado          = EXCLUDED.estado,
@@ -147,7 +152,8 @@ export async function guardarInscripcion(
          fuente_pago_id  = EXCLUDED.fuente_pago_id,
          tarjeta_resumen = EXCLUDED.tarjeta_resumen,
          eventos         = EXCLUDED.eventos,
-         autorizacion_cobro = EXCLUDED.autorizacion_cobro`,
+         autorizacion_cobro = EXCLUDED.autorizacion_cobro,
+         medio_pago      = EXCLUDED.medio_pago`,
       [
         inscripcion.id,
         inscripcion.referencia,
@@ -169,6 +175,7 @@ export async function guardarInscripcion(
         inscripcion.autorizacionCobro
           ? JSON.stringify(inscripcion.autorizacionCobro)
           : null,
+        inscripcion.medioPago ?? "WOMPI",
       ],
     );
 
@@ -207,7 +214,7 @@ export async function guardarInscripcion(
 export async function inscripcionPorReferencia(
   referencia: string,
 ): Promise<Inscripcion | undefined> {
-  // Las referencias de cobro llegan como TE27-XXXXXX-C2-1; nos quedamos con la base.
+  // Las referencias de cobro llegan como SX27-XXXXXX-C2-1; nos quedamos con la base.
   const base = referencia.split("-").slice(0, 2).join("-").toUpperCase();
   return unaSola(`SELECT * FROM inscripciones WHERE referencia = $1`, [base]);
 }
@@ -273,6 +280,213 @@ export async function reclamarCuota(
     [inscripcionId, numero, String(minutosAbandono)],
   );
   return filas[0] ?? null;
+}
+
+/* --------------------------------- Abonos --------------------------------- */
+
+/**
+ * Los abonos NO viajan dentro de `guardarInscripcion`.
+ *
+ * Esa función guarda las cuotas con un DELETE + INSERT del conjunto completo,
+ * que para un calendario recalculable es inofensivo. Un abono no: lleva la
+ * evidencia del ciclista y el historial de quién la revisó, cuándo y por
+ * cuánto. Borrarlo y reinsertarlo desde un objeto en memoria perdería la
+ * revisión que otra persona acabara de hacer. Por eso cada operación de abono
+ * es su propia sentencia, dirigida y mínima.
+ */
+
+type FilaAbono = {
+  id: string;
+  inscripcion_id: string;
+  creado_en: Date;
+  numero: number;
+  canal: Abono["canal"];
+  monto_declarado: number;
+  transferido_el: Date | null;
+  referencia_externa: string | null;
+  evidencia_clave: string;
+  evidencia_tipo: string;
+  evidencia_bytes: number;
+  evidencia_sha256: string;
+  huella: Abono["huella"] | null;
+  estado: Abono["estado"];
+  monto_aprobado: number | null;
+  revisado_en: Date | null;
+  revisado_por: string | null;
+  motivo_rechazo: string | null;
+};
+
+function aAbono(f: FilaAbono): Abono {
+  return {
+    id: f.id,
+    inscripcionId: f.inscripcion_id,
+    creadoEn: f.creado_en.toISOString(),
+    numero: f.numero,
+    canal: f.canal,
+    montoDeclarado: f.monto_declarado,
+    transferidoEl: f.transferido_el ? soloFecha(f.transferido_el) : undefined,
+    referenciaExterna: f.referencia_externa ?? undefined,
+    evidenciaClave: f.evidencia_clave,
+    evidenciaTipo: f.evidencia_tipo,
+    evidenciaBytes: f.evidencia_bytes,
+    evidenciaSha256: f.evidencia_sha256,
+    huella: f.huella ?? undefined,
+    estado: f.estado,
+    montoAprobado: f.monto_aprobado ?? undefined,
+    revisadoEn: f.revisado_en?.toISOString(),
+    revisadoPor: f.revisado_por ?? undefined,
+    motivoRechazo: f.motivo_rechazo ?? undefined,
+  };
+}
+
+export async function crearAbono(abono: Abono): Promise<Abono> {
+  const filas = await consultar<FilaAbono>(
+    `INSERT INTO abonos (
+       id, inscripcion_id, creado_en, numero, canal, monto_declarado,
+       transferido_el, referencia_externa, evidencia_clave, evidencia_tipo,
+       evidencia_bytes, evidencia_sha256, huella, estado, monto_aprobado,
+       revisado_en, revisado_por, motivo_rechazo
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+     RETURNING *`,
+    [
+      abono.id,
+      abono.inscripcionId,
+      abono.creadoEn,
+      abono.numero,
+      abono.canal,
+      abono.montoDeclarado,
+      abono.transferidoEl ?? null,
+      abono.referenciaExterna ?? null,
+      abono.evidenciaClave,
+      abono.evidenciaTipo,
+      abono.evidenciaBytes,
+      abono.evidenciaSha256,
+      abono.huella ? JSON.stringify(abono.huella) : null,
+      abono.estado,
+      abono.montoAprobado ?? null,
+      abono.revisadoEn ?? null,
+      abono.revisadoPor ?? null,
+      abono.motivoRechazo ?? null,
+    ],
+  );
+  return aAbono(filas[0]);
+}
+
+export async function abonosDe(inscripcionId: string): Promise<Abono[]> {
+  const filas = await consultar<FilaAbono>(
+    `SELECT * FROM abonos WHERE inscripcion_id = $1 ORDER BY creado_en DESC`,
+    [inscripcionId],
+  );
+  return filas.map(aAbono);
+}
+
+export async function abonoPorId(id: string): Promise<Abono | undefined> {
+  const filas = await consultar<FilaAbono>(`SELECT * FROM abonos WHERE id = $1`, [
+    id,
+  ]);
+  return filas[0] ? aAbono(filas[0]) : undefined;
+}
+
+/** La cola de revisión: lo más viejo primero, que es el que lleva más esperando. */
+export async function abonosPorRevisar(limite = 100): Promise<Abono[]> {
+  const filas = await consultar<FilaAbono>(
+    `SELECT * FROM abonos
+      WHERE estado IN ('ENVIADA','EN_REVISION')
+      ORDER BY creado_en
+      LIMIT $1`,
+    [limite],
+  );
+  return filas.map(aAbono);
+}
+
+/**
+ * Cuántas veces se subió antes esta misma imagen.
+ *
+ * No bloquea nada: es un aviso para el revisor. La misma captura reenviada
+ * suele ser un error honesto (subió dos veces), pero también es el modo obvio
+ * de intentar que un solo pago valga por dos.
+ */
+export async function abonosConMismaEvidencia(
+  sha256: string,
+  exceptoId?: string,
+): Promise<Abono[]> {
+  const filas = await consultar<FilaAbono>(
+    `SELECT * FROM abonos
+      WHERE evidencia_sha256 = $1
+        AND ($2::uuid IS NULL OR id <> $2::uuid)
+      ORDER BY creado_en`,
+    [sha256, exceptoId ?? null],
+  );
+  return filas.map(aAbono);
+}
+
+/**
+ * Toma el abono para revisarlo, de forma atómica.
+ *
+ * Mismo patrón que `reclamarCuota`: un solo UPDATE condicional. Si dos
+ * revisores abren la cola a la vez, la base deja pasar a uno y al otro le
+ * devuelve cero filas. Sin esto los dos leerían 'ENVIADA' y podrían aprobar el
+ * mismo comprobante por montos distintos, que es dinero contado dos veces.
+ *
+ * Una revisión abierta y olvidada se libera sola a los 15 minutos: si no,
+ * bastaría con que a alguien se le cerrara la pestaña para dejar el abono
+ * bloqueado para siempre.
+ */
+export async function reclamarAbono(
+  id: string,
+  revisadoPor?: string,
+  minutosAbandono = 15,
+): Promise<Abono | null> {
+  const filas = await consultar<FilaAbono>(
+    `UPDATE abonos
+        SET estado = 'EN_REVISION',
+            revisado_en = now(),
+            revisado_por = COALESCE($2, revisado_por)
+      WHERE id = $1
+        AND (
+          estado = 'ENVIADA'
+          OR (estado = 'EN_REVISION'
+              AND revisado_en < now() - ($3 || ' minutes')::interval)
+        )
+      RETURNING *`,
+    [id, revisadoPor ?? null, String(minutosAbandono)],
+  );
+  return filas[0] ? aAbono(filas[0]) : null;
+}
+
+/**
+ * Cierra la revisión: VERIFICADA con su monto, o RECHAZADA con su motivo.
+ *
+ * También es condicional: solo cierra lo que sigue abierto. Un abono ya
+ * resuelto no se puede reescribir por esta vía — corregir una verificación es
+ * una decisión distinta y debe dejar su propio rastro.
+ */
+export async function resolverAbono(params: {
+  id: string;
+  estado: Extract<Abono["estado"], "VERIFICADA" | "RECHAZADA">;
+  montoAprobado?: number;
+  motivoRechazo?: string;
+  revisadoPor: string;
+}): Promise<Abono | null> {
+  const filas = await consultar<FilaAbono>(
+    `UPDATE abonos
+        SET estado = $2,
+            monto_aprobado = $3,
+            motivo_rechazo = $4,
+            revisado_por = $5,
+            revisado_en = now()
+      WHERE id = $1
+        AND estado IN ('ENVIADA','EN_REVISION')
+      RETURNING *`,
+    [
+      params.id,
+      params.estado,
+      params.estado === "VERIFICADA" ? (params.montoAprobado ?? null) : null,
+      params.estado === "RECHAZADA" ? (params.motivoRechazo ?? null) : null,
+      params.revisadoPor,
+    ],
+  );
+  return filas[0] ? aAbono(filas[0]) : null;
 }
 
 /* --------------------------------- Correos -------------------------------- */

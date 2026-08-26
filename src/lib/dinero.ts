@@ -1,5 +1,5 @@
 import { CUOTAS_DEL_PLAN, DIA_DE_COBRO } from "./catalogo";
-import type { Cuota } from "./tipos";
+import type { Abono, Cuota, EstadoInscripcion } from "./tipos";
 
 const formatoCOP = new Intl.NumberFormat("es-CO", {
   style: "currency",
@@ -11,15 +11,13 @@ export function pesos(valor: number): string {
   return formatoCOP.format(valor).replace(/ /g, " ");
 }
 
-/** Wompi trabaja siempre en centavos. */
-export function aCentavos(valorEnPesos: number): number {
-  return Math.round(valorEnPesos * 100);
-}
-
 /**
  * Reparte un total en N cuotas redondeadas al millar más cercano,
  * garantizando que la suma sea exactamente el total.
- * 750.000 en 4 → 188.000 · 188.000 · 187.000 · 187.000
+ *
+ * Sobrevive al retiro de la pasarela porque sigue sirviendo para proponer un
+ * reparto de abonos: 3 abonos de $126.667 no se los dice nadie a un ciclista.
+ * 380.000 en 4 → 95.000 · 95.000 · 95.000 · 95.000
  */
 export function repartirEnCuotas(total: number, n = CUOTAS_DEL_PLAN): number[] {
   const base = Math.floor(total / n / 1000) * 1000;
@@ -95,6 +93,73 @@ export function proximaCuota(cuotas: Cuota[]): Cuota | undefined {
   return cuotas
     .filter((c) => c.estado !== "PAGADA")
     .sort((a, b) => a.vence.localeCompare(b.vence))[0];
+}
+
+/* -------------------- Pago manual: la cuenta la hacen los abonos ------------ */
+
+/**
+ * Lo que realmente entró: la suma de los abonos verificados.
+ *
+ * Cuenta `montoAprobado` y no `montoDeclarado` a propósito. Lo declarado es lo
+ * que el ciclista escribió en un formulario; lo aprobado es lo que alguien vio
+ * en el extracto. Solo lo segundo es dinero.
+ */
+export function abonadoVerificado(abonos: Abono[]): number {
+  return abonos
+    .filter((a) => a.estado === "VERIFICADA")
+    .reduce((s, a) => s + (a.montoAprobado ?? 0), 0);
+}
+
+/** Lo que está subido y todavía nadie ha revisado. No es dinero: es una promesa. */
+export function abonadoEnRevision(abonos: Abono[]): number {
+  return abonos
+    .filter((a) => a.estado === "ENVIADA" || a.estado === "EN_REVISION")
+    .reduce((s, a) => s + a.montoDeclarado, 0);
+}
+
+/**
+ * Lo que falta por pagar.
+ *
+ * Nunca baja de cero: si alguien transfirió de más, el saldo es 0 y el
+ * excedente se ve con `excedente()`. Un saldo negativo se colaría en correos y
+ * tickets como "faltan −20.000".
+ */
+export function saldoDesdeAbonos(total: number, abonos: Abono[]): number {
+  return Math.max(0, total - abonadoVerificado(abonos));
+}
+
+/**
+ * Cuánto entró de más. DECISIÓN PENDIENTE DE CONFIRMAR — no se devuelve
+ * automáticamente (docs/decisiones-pago-manual.md §6); esto solo lo hace
+ * visible para que alguien lo resuelva hablando.
+ */
+export function excedente(total: number, abonos: Abono[]): number {
+  return Math.max(0, abonadoVerificado(abonos) - total);
+}
+
+/**
+ * El estado que le corresponde a una inscripción según sus abonos.
+ *
+ * El orden importa: primero el dinero que ya entró, después lo que espera
+ * revisión, y de último el caso de no haber nada. Un comprobante rechazado no
+ * cambia el estado — el cupo sigue reservado y el ciclista puede volver a
+ * subir (docs/decisiones-pago-manual.md §7), así que EN_MORA no aparece aquí.
+ */
+export function estadoDesdeAbonos(
+  total: number,
+  abonos: Abono[],
+): EstadoInscripcion {
+  if (saldoDesdeAbonos(total, abonos) === 0 && total > 0) return "COMPLETA";
+  if (abonadoVerificado(abonos) > 0) return "AL_DIA";
+  if (abonos.some((a) => a.estado === "ENVIADA" || a.estado === "EN_REVISION")) {
+    return "EN_VERIFICACION";
+  }
+  return "PENDIENTE_PAGO";
+}
+
+/** Cuántos abonos ocupan cupo: los rechazados no gastan intento. */
+export function abonosQueCuentan(abonos: Abono[]): Abono[] {
+  return abonos.filter((a) => a.estado !== "RECHAZADA");
 }
 
 export function fechaLarga(iso: string): string {

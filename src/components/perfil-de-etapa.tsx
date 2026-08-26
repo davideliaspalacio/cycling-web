@@ -60,15 +60,15 @@ export function PerfilDeEtapa({
   return (
     <div className="w-full">
       <div className="mb-2 flex items-end justify-between gap-4">
-        <p className="font-mono text-[0.68rem] font-bold uppercase tracking-[0.2em] text-lima">
+        <p className="font-mono text-[0.68rem] font-bold uppercase tracking-[0.2em] text-rio">
           Perfil de inscripción
         </p>
-        <p className="raya-mono text-[0.72rem] font-bold text-hueso/55">
+        <p className="raya-mono text-[0.72rem] font-bold text-tinta/75">
           KM {String(hitos[actual]?.km ?? 0).padStart(2, "0")} / {hitos[total]?.km}
         </p>
       </div>
 
-      <div className="relative rounded-2xl border-[3px] border-tinta bg-selva/70 px-3 pb-2 pt-3 shadow-[6px_6px_0_0_var(--color-tinta)]">
+      <div className="relative rounded-2xl border-[3px] border-tinta bg-rio px-3 pb-2 pt-3 shadow-[6px_6px_0_0_var(--color-tinta)]">
         <svg
           viewBox="0 0 1000 120"
           preserveAspectRatio="none"
@@ -87,17 +87,17 @@ export function PerfilDeEtapa({
               />
             </clipPath>
             <linearGradient id="relleno-perfil" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-lima)" stopOpacity="0.5" />
-              <stop offset="100%" stopColor="var(--color-lima)" stopOpacity="0.04" />
+              <stop offset="0%" stopColor="var(--color-turquesa)" stopOpacity="0.5" />
+              <stop offset="100%" stopColor="var(--color-turquesa)" stopOpacity="0.04" />
             </linearGradient>
           </defs>
 
           {/* Terreno por recorrer */}
-          <polygon points={area} fill="rgb(243 251 239 / 0.05)" />
+          <polygon points={area} fill="rgb(255 255 255 / 0.10)" />
           <polyline
             points={linea}
             fill="none"
-            stroke="rgb(243 251 239 / 0.28)"
+            stroke="rgb(255 255 255 / 0.42)"
             strokeWidth="3"
             strokeLinejoin="round"
             vectorEffect="non-scaling-stroke"
@@ -110,7 +110,7 @@ export function PerfilDeEtapa({
             <polyline
               points={linea}
               fill="none"
-              stroke="var(--color-lima)"
+              stroke="var(--color-turquesa)"
               strokeWidth="4"
               strokeLinejoin="round"
               strokeLinecap="round"
@@ -126,7 +126,7 @@ export function PerfilDeEtapa({
               x2={m.x === 0 ? 2 : m.x === 1000 ? 998 : m.x}
               y1={m.y}
               y2="120"
-              stroke={i <= actual ? "var(--color-lima)" : "rgb(243 251 239 / 0.2)"}
+              stroke={i <= actual ? "var(--color-turquesa)" : "rgb(255 255 255 / 0.32)"}
               strokeWidth="2"
               vectorEffect="non-scaling-stroke"
               strokeDasharray="3 4"
@@ -137,7 +137,7 @@ export function PerfilDeEtapa({
         {/* Corredor: fuera del SVG para que no se deforme con preserveAspectRatio */}
         <span
           aria-hidden
-          className="pointer-events-none absolute z-10 grid h-8 w-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-[3px] border-tinta bg-lima text-tinta shadow-[3px_3px_0_0_var(--color-tinta)] animate-pulse-ring"
+          className="pointer-events-none absolute z-10 grid h-8 w-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-[3px] border-tinta bg-turquesa text-tinta shadow-[3px_3px_0_0_var(--color-tinta)] animate-pulse-ring"
           style={{
             left: `calc(0.75rem + ${(marca.x / 1000) * 100}% - ${(marca.x / 1000) * 1.5}rem)`,
             top: `calc(0.75rem + ${(marca.y / 120) * 100}% * 0.78)`,
@@ -166,17 +166,17 @@ export function PerfilDeEtapa({
                 aria-current={i === actual ? "step" : undefined}
               >
                 <span
-                  className={`raya-mono block text-[0.62rem] font-bold ${cubierto ? "text-lima" : "text-hueso/35"}`}
+                  className={`raya-mono block text-[0.62rem] font-bold ${cubierto ? "text-rio" : "text-tinta/75"}`}
                 >
                   KM {String(h.km).padStart(2, "0")}
                 </span>
                 <span
                   className={`block truncate font-display text-[0.72rem] font-bold leading-tight sm:text-[0.84rem] ${
                     i === actual
-                      ? "text-hueso"
+                      ? "text-tinta"
                       : cubierto
-                        ? "text-hueso/60"
-                        : "text-hueso/30"
+                        ? "text-tinta/85"
+                        : "text-tinta/75"
                   }`}
                 >
                   {h.titulo}

@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { EVENTO, NOMBRE_COMPLETO } from "@/lib/catalogo";
 import { Bricolage_Grotesque, Instrument_Sans, Space_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -23,13 +24,12 @@ const spaceMono = Space_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Tibet Epic XCM 2027 — Inscripciones",
-  description:
-    "Maratón de montaña en el páramo. Escoge tu categoría, inscríbete en cinco pasos y paga de una o en cuatro cuotas.",
+  title: `${NOMBRE_COMPLETO} — Inscripciones`,
+  description: `Maratón de montaña en ${EVENTO.lugar}. Escoge tu categoría, inscríbete en cinco pasos y paga de una o en cuatro cuotas.`,
 };
 
 export const viewport: Viewport = {
-  themeColor: "#06110e",
+  themeColor: "#dfeefc",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

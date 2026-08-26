@@ -1,5 +1,12 @@
 import { z } from "zod";
-import { CATEGORIAS, TALLAS, TIPOS_RH } from "./catalogo";
+import {
+  ABONO_MINIMO,
+  ANIO_CARRERA,
+  CANALES_PAGO,
+  CATEGORIAS,
+  TALLAS,
+  TIPOS_RH,
+} from "./catalogo";
 
 const texto = (min: number, max: number, campo: string) =>
   z
@@ -30,8 +37,6 @@ export const esquemaCiclista = z.object({
     .string()
     .trim()
     .regex(/^\d{7,15}$/, "El celular son entre 7 y 15 dígitos, sin espacios."),
-  equipo: z.string().trim().max(60).default(""),
-  instagram: z.string().trim().max(40).default(""),
   contactoEmergencia: texto(3, 80, "el nombre de tu contacto de emergencia"),
   telefonoEmergencia: z
     .string()
@@ -54,7 +59,7 @@ export const esquemaTallas = z.object({
 });
 
 export const esquemaConsentimientos = z.object({
-  reembolso: z.literal(true),
+  politicaPago: z.literal(true),
   datos: z.literal(true),
   exoneracion: z.literal(true),
 });
@@ -71,7 +76,10 @@ export const esquemaInscripcion = z.object({
 export type EntradaInscripcion = z.infer<typeof esquemaInscripcion>;
 
 /** Edad cumplida al 31 de diciembre del año de la carrera. */
-export function edadEnCarrera(fechaNacimiento: string, anioCarrera = 2027): number {
+export function edadEnCarrera(
+  fechaNacimiento: string,
+  anioCarrera = ANIO_CARRERA,
+): number {
   const nacimiento = new Date(fechaNacimiento);
   return anioCarrera - nacimiento.getUTCFullYear();
 }
@@ -88,31 +96,51 @@ export function avisoDeCategoria(
   if (!fechaNacimiento) return null;
   const edad = edadEnCarrera(fechaNacimiento);
   const rangos: Record<string, [number, number]> = {
-    JUVENIL: [18, 29],
-    "MASTER-A1": [30, 34],
-    "MASTER-A2": [35, 39],
-    "MASTER-B1": [40, 44],
-    "MASTER-B2": [45, 49],
-    "MASTER-C": [50, 59],
-    "MASTER-D": [60, 120],
-    DAMAS: [18, 34],
-    "DAMAS-MASTER": [35, 120],
+    SENIOR: [18, 29],
+    "MASTER-A": [30, 39],
+    "MASTER-B": [40, 49],
+    "MASTER-C": [50, 120],
+    "DAMAS-MASTER-A": [35, 120],
   };
   const rango = rangos[codigo];
   if (!rango) return null;
   if (edad < rango[0] || edad > rango[1]) {
-    return `Cumples ${edad} años en 2027 y esta categoría es para ${rango[0]}${rango[1] > 100 ? " años o más" : ` a ${rango[1]} años`}. Puedes seguir, pero la organización va a pedirte que la cambies.`;
+    return `Cumples ${edad} años en ${ANIO_CARRERA} y esta categoría es para ${rango[0]}${rango[1] > 100 ? " años o más" : ` a ${rango[1]} años`}. Puedes seguir, pero la organización va a pedirte que la cambies.`;
   }
   return null;
 }
 
-export const esquemaTarjeta = z.object({
-  numero: z
+/**
+ * Los campos de texto que acompañan a un comprobante.
+ *
+ * Llegan de un `multipart/form-data`, así que todo entra como cadena; por eso
+ * el monto se convierte aquí y no se confía en que venga como número. El
+ * archivo NO se valida con zod: eso se hace mirando sus bytes en
+ * `src/lib/almacenamiento.ts`.
+ */
+export const esquemaAbono = z.object({
+  referencia: texto(4, 40, "la referencia de tu inscripción").toUpperCase(),
+  canal: z.enum(CANALES_PAGO as [string, ...string[]]),
+  montoDeclarado: z
     .string()
-    .transform((v) => v.replace(/\s/g, ""))
-    .refine((v) => /^\d{13,19}$/.test(v), "El número de la tarjeta no está completo."),
-  titular: texto(3, 60, "el nombre del titular"),
-  mesExp: z.string().regex(/^(0[1-9]|1[0-2])$/, "Mes inválido."),
-  anioExp: z.string().regex(/^\d{2}$/, "Año inválido."),
-  cvc: z.string().regex(/^\d{3,4}$/, "El código son 3 o 4 dígitos."),
+    .trim()
+    // El ciclista escribe "150.000" o "150000"; los dos son el mismo número.
+    .transform((v) => v.replace(/[^\d]/g, ""))
+    .refine((v) => v.length > 0, "Escribe cuánto transferiste.")
+    .transform(Number)
+    .refine(
+      (v) => Number.isInteger(v) && v > 0,
+      "El monto son pesos enteros, sin centavos.",
+    )
+    .refine(
+      (v) => v >= ABONO_MINIMO,
+      `El abono mínimo es $${ABONO_MINIMO.toLocaleString("es-CO")}.`,
+    ),
+  transferidoEl: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Elige la fecha de la transferencia.")
+    .optional(),
+  referenciaExterna: z.string().trim().max(60).optional(),
 });
+
+export type EntradaAbono = z.infer<typeof esquemaAbono>;

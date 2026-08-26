@@ -4,16 +4,24 @@ import { Pool, type PoolClient } from "pg";
 /**
  * Pool de conexiones a Postgres.
  *
- * Usamos `pg` normal y no el driver HTTP de Neon a propósito: la app corre en
- * un contenedor de larga vida (Railway), no en funciones serverless, así que un
- * pool clásico es más rápido y más simple. La cadena apunta al endpoint
- * `-pooler` de Neon, que ya multiplexa del lado del servidor.
+ * Usamos `pg` normal y no el driver HTTP de Neon a propósito. El despliegue es
+ * Vercel con Fluid Compute, que reutiliza la misma instancia entre peticiones
+ * concurrentes, así que un pool clásico sí se amortiza — no es el serverless
+ * de una-instancia-por-petición donde un pool no tendría sentido.
+ *
+ * La cadena apunta al endpoint `-pooler` de Neon, que además multiplexa del
+ * lado del servidor. Por eso `max` es bajo: lo que hay que evitar es que
+ * muchas instancias vivas a la vez agoten el límite de conexiones de Neon.
+ *
+ * Cuidado al depurar: `SET search_path` sin `LOCAL` se queda pegado en la
+ * conexión compartida y contamina a quien la reciba después. Dentro de
+ * transacción y con `SET LOCAL`.
  */
 
 declare global {
   // El hot reload de Next recrea los módulos; sin esto abriríamos un pool nuevo
   // en cada recarga hasta agotar las conexiones.
-  var __poolTibetEpic: Pool | undefined;
+  var __poolSantanderXtreme: Pool | undefined;
 }
 
 export const HAY_BASE_DE_DATOS = Boolean(process.env.DATABASE_URL);
@@ -21,7 +29,7 @@ export const HAY_BASE_DE_DATOS = Boolean(process.env.DATABASE_URL);
 function crearPool(): Pool {
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    max: Number(process.env.DB_MAX_CONEXIONES ?? 10),
+    max: Number(process.env.DB_MAX_CONEXIONES ?? 5),
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
   });
@@ -36,8 +44,8 @@ export function pool(): Pool {
   if (!HAY_BASE_DE_DATOS) {
     throw new Error("Falta DATABASE_URL.");
   }
-  globalThis.__poolTibetEpic ??= crearPool();
-  return globalThis.__poolTibetEpic;
+  globalThis.__poolSantanderXtreme ??= crearPool();
+  return globalThis.__poolSantanderXtreme;
 }
 
 export async function consultar<T extends Record<string, unknown>>(

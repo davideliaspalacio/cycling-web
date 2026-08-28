@@ -179,7 +179,11 @@ export type CorreoEnviado = {
   plantilla: string;
   html: string;
   enviadoEn: string;
-  proveedor: "resend" | "simulacion";
+  /**
+   * `sin-configurar` es producción sin llave de Resend: el correo se guardó
+   * pero nunca salió. Es un estado distinto de la simulación de desarrollo.
+   */
+  proveedor: "resend" | "simulacion" | "sin-configurar";
   proveedorId?: string;
   referencia?: string;
 };

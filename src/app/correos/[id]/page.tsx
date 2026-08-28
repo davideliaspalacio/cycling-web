@@ -25,7 +25,11 @@ export default async function PaginaCorreo({ params }: PageProps<"/correos/[id]"
         <div className="mt-5 flex flex-wrap items-center gap-3">
           <Chip tono="turquesa">{correo.plantilla.replace(/-/g, " ")}</Chip>
           <Chip tono="rio">
-            {correo.proveedor === "resend" ? "Enviado por Resend" : "Simulado"}
+            {correo.proveedor === "resend"
+              ? "Enviado por Resend"
+              : correo.proveedor === "sin-configurar"
+                ? "NO SE ENVIÓ — faltaba la llave de Resend"
+                : "Simulado"}
           </Chip>
         </div>
 

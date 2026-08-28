@@ -49,3 +49,24 @@ nada automáticamente: es una conversación humana.
 
 El cupo sigue reservado. El ciclista puede volver a subir evidencia sin
 límite de intentos hasta la fecha de cierre.
+
+---
+
+## 8. Proveedor de correo: Resend, plan de pago
+
+Confirmado con el cliente. Volumen real con 700 inscritos: entre 6 y 11
+correos por ciclista según pague de una o en abonos, o sea **4.000 a 7.700
+en total** repartidos en los meses de inscripción.
+
+El gratuito de Resend da 3.000 al mes pero **tope 100 al día**, y ese tope
+se revienta el primer día bueno de inscripciones. Cuando se revienta los
+correos no se encolan: fallan. Y un ciclista que transfirió y no recibe
+confirmación escribe a la organización, que es el trabajo manual que
+estamos tratando de evitar.
+
+AWS SES costaría unos 0,80 USD **en total** en vez de 20 al mes, pero exige
+salir del sandbox, firmar a mano y reescribir el envío. No compensa.
+
+**Lo que decide si los correos llegan no es el proveedor sino el dominio.**
+Un remitente de Gmail no pasa la verificación de dominio y Resend lo
+rechaza. Hace falta dominio propio.

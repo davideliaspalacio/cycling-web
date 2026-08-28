@@ -273,9 +273,12 @@ PANEL_CLAVE=        # la que se le da a quien revisa
 # Comprobantes. Sin esto se guardan en .datos/evidencias/
 BLOB_READ_WRITE_TOKEN=
 
-# Correo. Sin esto se renderizan en /correos sin enviarse
+# Correo — Resend, plan de pago. Sin esto, en desarrollo se renderizan en
+# /correos; en producción se marcan como NO ENVIADOS y se avisa en pantalla.
 RESEND_API_KEY=
-CORREO_REMITENTE=   # exige dominio verificado en Resend
+# Exige dominio propio verificado: un remitente de Gmail lo rechaza Resend.
+CORREO_REMITENTE=
+CORREO_RESPUESTA=   # aquí sí puede ir el Gmail de la organización
 
 # Cuentas de recaudo. Tienen valor por defecto en el código; estas variables
 # permiten cambiarlas sin desplegar. Nequi, Daviplata y Bre-B comparten celular.
@@ -303,7 +306,10 @@ en el importador: ya se perdió una en silencio por olvidarlo.
 - [ ] **Identidad por persona en el panel** si va a revisar más de una.
 - [ ] **Rotar credenciales**: las llaves y la cadena de conexión que se usaron
       en desarrollo viajaron por chat. Trátalas como comprometidas.
-- [ ] **Dominio verificado en Resend** — un remitente de Gmail cae en spam.
+- [ ] **Dominio propio verificado en Resend.** Es lo único bloqueante del
+      correo: Resend rechaza remitentes de Gmail. Unos 12 USD/año de dominio
+      más tres registros DNS. Las respuestas pueden seguir llegando al Gmail
+      de la organización vía `CORREO_RESPUESTA`.
 - [ ] **Política de mora**: qué pasa con quien no termina de abonar.
 - [ ] **Retención de comprobantes**: cuánto se guardan y quién puede verlos.
 - [ ] **Aviso si el cron falla** — hoy falla en silencio.

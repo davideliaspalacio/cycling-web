@@ -40,11 +40,27 @@ export default async function PaginaCorreos() {
           eyebrow={
             MODO_CORREO === "resend"
               ? "Enviados con Resend"
-              : "Modo simulación · sin llave de Resend"
+              : MODO_CORREO === "sin-configurar"
+                ? "NINGUNO DE ESTOS CORREOS SALIÓ"
+                : "Modo simulación · sin llave de Resend"
           }
           titulo="Lo que le llega al ciclista."
           bajada="Cada movimiento de pago dispara un correo. Aquí queda el registro completo, con el HTML tal como lo ve en su bandeja."
         />
+
+        {MODO_CORREO === "sin-configurar" && (
+          <Tarjeta tono="alerta" className="mt-8 p-6">
+            <p className="font-display text-lg font-extrabold text-nube">
+              Falta configurar el correo.
+            </p>
+            <p className="mt-2 text-[0.95rem] leading-relaxed text-nube/90">
+              No hay <code>RESEND_API_KEY</code>, así que los correos de abajo
+              se guardaron pero <strong>nunca salieron</strong>. Los ciclistas
+              que transfirieron no recibieron confirmación. Configura la llave y
+              el dominio remitente antes de seguir recibiendo pagos.
+            </p>
+          </Tarjeta>
+        )}
 
         {correos.length === 0 ? (
           <Tarjeta tono="marea" className="mt-10 p-8">

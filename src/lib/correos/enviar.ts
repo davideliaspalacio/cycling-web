@@ -20,7 +20,39 @@ const REMITENTE =
   `${EVENTO.nombre} <${EVENTO.correoContacto}>`;
 const RESPONDER_A = process.env.CORREO_RESPUESTA ?? EVENTO.correoContacto;
 
-export const MODO_CORREO: "resend" | "simulacion" = API_KEY ? "resend" : "simulacion";
+const EN_PRODUCCION = process.env.NODE_ENV === "production";
+
+/**
+ * Tres estados, no dos.
+ *
+ * En desarrollo, no tener llave es lo normal: el correo se renderiza y se
+ * guarda para poder ver el flujo completo sin credenciales. En producción es
+ * un fallo grave y silencioso — 700 ciclistas transfiriendo y ni una sola
+ * confirmación saliendo, mientras /correos se llena de correos que parecen
+ * enviados. Por eso ahí se llama por su nombre: `sin-configurar`.
+ */
+export const MODO_CORREO: "resend" | "simulacion" | "sin-configurar" = API_KEY
+  ? "resend"
+  : EN_PRODUCCION
+    ? "sin-configurar"
+    : "simulacion";
+
+if (MODO_CORREO === "sin-configurar") {
+  console.error(
+    "[correos] FALTA RESEND_API_KEY EN PRODUCCIÓN. Ningún correo va a salir: " +
+      "se guardan en /correos marcados como no enviados. El ciclista que " +
+      "transfiere no recibirá confirmación.",
+  );
+}
+
+// Resend exige dominio verificado. Un remitente de Gmail o Hotmail no falla
+// aquí, falla en el primer envío, que es el peor momento para enterarse.
+if (API_KEY && /@(gmail|hotmail|outlook|yahoo)\./i.test(REMITENTE)) {
+  console.error(
+    `[correos] El remitente ${REMITENTE} es de un dominio que no se puede ` +
+      "verificar. Resend va a rechazar los envíos: hace falta un dominio propio.",
+  );
+}
 
 const resend = API_KEY ? new Resend(API_KEY) : null;
 

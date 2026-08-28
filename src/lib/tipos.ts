@@ -180,10 +180,13 @@ export type CorreoEnviado = {
   html: string;
   enviadoEn: string;
   /**
-   * `sin-configurar` es producción sin llave de Resend: el correo se guardó
-   * pero nunca salió. Es un estado distinto de la simulación de desarrollo.
+   * `sin-configurar` es producción sin llave: el correo se guardó pero nunca
+   * salió. Es un estado distinto de la simulación de desarrollo.
+   *
+   * `resend` es histórico. Los correos guardan con qué proveedor salieron, y
+   * las filas anteriores al cambio siguen diciendo la verdad de su momento.
    */
-  proveedor: "resend" | "simulacion" | "sin-configurar";
+  proveedor: "brevo" | "resend" | "simulacion" | "sin-configurar";
   proveedorId?: string;
   referencia?: string;
 };

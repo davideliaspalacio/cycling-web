@@ -70,3 +70,21 @@ salir del sandbox, firmar a mano y reescribir el envío. No compensa.
 **Lo que decide si los correos llegan no es el proveedor sino el dominio.**
 Un remitente de Gmail no pasa la verificación de dominio y Resend lo
 rechaza. Hace falta dominio propio.
+
+### Corrección: se cambia a Brevo
+
+El torneo es en julio de 2027 y faltan unos once meses. Resend Pro serían
+**220 USD por mandar unos 5.000 correos** — 4 centavos por correo. No se
+justifica.
+
+Brevo cubre el evento entero **gratis**: 300 correos al día, y el pico real
+más alto rondaría los 150. No es pago por uso: es un gratuito con tope
+diario y, por encima, planes mensuales.
+
+**Verificar antes de abrir inscripciones**: si el plan gratuito añade la
+marca de Brevo al pie del correo. Si lo hace y molesta para un evento de
+cliente, el plan más barato la quita.
+
+El envío se hizo por HTTP contra la API en vez de con el SDK: quince
+líneas, una dependencia menos, y cambiar de proveedor vuelve a ser tocar
+`src/lib/correos/enviar.ts` y nada más. Ya pasó una vez.

@@ -18,7 +18,7 @@ pnpm dev
 ```
 
 Sin `DATABASE_URL` la aplicación guarda en `.datos/` (archivos JSON), sin
-`RESEND_API_KEY` los correos se renderizan y quedan en `/correos` en vez de
+`BREVO_API_KEY` los correos se renderizan y quedan en `/correos` en vez de
 enviarse, y sin `BLOB_READ_WRITE_TOKEN` los comprobantes se guardan en disco.
 **Todo el flujo se puede demostrar sin una sola credencial.**
 
@@ -43,7 +43,7 @@ flowchart TB
     BLOB[["Vercel Blob privado<br/>comprobantes"]]
   end
 
-  MAIL["Resend"]
+  MAIL["Brevo"]
 
   F --> API --> SVC
   C --> API
@@ -133,7 +133,7 @@ sequenceDiagram
   participant P as /panel/evidencias
   participant S as servicio.ts
   participant B as Blob privado
-  participant M as Resend
+  participant M as Brevo
 
   R->>P: entra con la clave del panel
   P->>S: abonosPorRevisar()
@@ -246,7 +246,7 @@ renderizadas en `/correos`. Las que importan en pago manual:
 > sale solo"*. Invertirlo era el error más caro de esta migración.
 
 Un fallo al enviar correo **no revierte la aprobación**: verificar mueve
-dinero, notificar no. Una caída de Resend no puede hacerle creer al revisor que
+dinero, notificar no. Una caída del proveedor no puede hacerle creer al revisor que
 la aprobación falló.
 
 ## Cambio de competidor
@@ -273,10 +273,10 @@ PANEL_CLAVE=        # la que se le da a quien revisa
 # Comprobantes. Sin esto se guardan en .datos/evidencias/
 BLOB_READ_WRITE_TOKEN=
 
-# Correo — Resend, plan de pago. Sin esto, en desarrollo se renderizan en
-# /correos; en producción se marcan como NO ENVIADOS y se avisa en pantalla.
-RESEND_API_KEY=
-# Exige dominio propio verificado: un remitente de Gmail lo rechaza Resend.
+# Correo — Brevo. Sin esto, en desarrollo se renderizan en /correos; en
+# producción se marcan como NO ENVIADOS y se avisa en pantalla.
+BREVO_API_KEY=
+# Exige dominio propio verificado. Un remitente de Gmail se rechaza.
 CORREO_REMITENTE=
 CORREO_RESPUESTA=   # aquí sí puede ir el Gmail de la organización
 
@@ -306,8 +306,8 @@ en el importador: ya se perdió una en silencio por olvidarlo.
 - [ ] **Identidad por persona en el panel** si va a revisar más de una.
 - [ ] **Rotar credenciales**: las llaves y la cadena de conexión que se usaron
       en desarrollo viajaron por chat. Trátalas como comprometidas.
-- [ ] **Dominio propio verificado en Resend.** Es lo único bloqueante del
-      correo: Resend rechaza remitentes de Gmail. Unos 12 USD/año de dominio
+- [ ] **Dominio propio verificado en Brevo.** Es lo único bloqueante del
+      correo: los remitentes de Gmail se rechazan. Unos 12 USD/año de dominio
       más tres registros DNS. Las respuestas pueden seguir llegando al Gmail
       de la organización vía `CORREO_RESPUESTA`.
 - [ ] **Política de mora**: qué pasa con quien no termina de abonar.

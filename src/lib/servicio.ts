@@ -52,7 +52,7 @@ function anota(ins: Inscripcion, tipo: string, detalle: string) {
 /**
  * Notificación que no puede tumbar la operación que la disparó.
  *
- * Verificar un abono mueve dinero; mandar el correo no. Si Resend está caído,
+ * Verificar un abono mueve dinero; mandar el correo no. Si el proveedor está caído,
  * lo último que queremos es que la excepción del correo deje al revisor
  * creyendo que la aprobación falló cuando ya quedó escrita en la base. Se
  * registra en el log y sigue.

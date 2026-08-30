@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="es-CO">
+<head>
+<meta charset="utf-8">
+<title>Guía de pruebas — Santander Xtreme 2027</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap">
+<style>
+  :root{
+    --tinta:#08213a; --grafito:#4a6076; --tenue:#8ba0b4;
+    --papel:#fff; --bruma:#eaf4fd; --borde:#cfe0ef;
+    --rio:#0b4f8f; --turquesa:#2fd2ef; --sol:#ffb02e; --alerta:#c81e3c;
+  }
+  *{box-sizing:border-box}
+  @page{size:Letter; margin:12mm 12mm 10mm}
+  body{margin:0;font-family:"Instrument Sans",system-ui,sans-serif;font-size:9.3pt;
+       line-height:1.4;color:var(--tinta);background:var(--papel);
+       -webkit-print-color-adjust:exact;print-color-adjust:exact}
+  h1,h2,h3{font-family:"Bricolage Grotesque",system-ui,sans-serif;font-weight:800;margin:0;letter-spacing:-.025em}
+  h1{font-size:20pt;line-height:1.02}
+  h2{font-size:12pt;margin:0 0 5pt}
+  p{margin:0 0 6pt}
+  .mono{font-family:"Space Mono",monospace}
+  .hoja{page-break-after:always}
+  .hoja:last-child{page-break-after:auto}
+
+  header.tope{display:flex;justify-content:space-between;align-items:flex-end;
+    border-bottom:2.5pt solid var(--tinta);padding-bottom:7pt;margin-bottom:10pt}
+  .marca{font-family:"Bricolage Grotesque";font-weight:800;font-size:11pt;letter-spacing:-.04em}
+  .marca span{color:var(--rio)}
+  .cejilla{font-family:"Space Mono",monospace;font-size:7pt;font-weight:700;
+    letter-spacing:.16em;text-transform:uppercase;color:var(--tenue);margin:0 0 3pt}
+
+  .aviso{background:var(--bruma);border:2pt solid var(--tinta);border-radius:7pt;padding:8pt 11pt;margin-bottom:10pt}
+  .ojo{background:var(--sol);border:2pt solid var(--tinta);border-radius:7pt;padding:8pt 11pt;margin-bottom:10pt}
+  .url{border:2pt dashed var(--tinta);border-radius:7pt;padding:8pt 11pt;margin-bottom:11pt;background:var(--bruma)}
+  .url .linea{border-bottom:1.4pt solid var(--tinta);height:19pt;margin-top:4pt}
+
+  table{width:100%;border-collapse:collapse;margin:0 0 10pt}
+  th,td{text-align:left;padding:4.2pt 7pt;border-bottom:.8pt solid var(--borde);vertical-align:top}
+  thead th{font-family:"Space Mono",monospace;font-size:7pt;font-weight:700;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--tenue);border-bottom:1.8pt solid var(--tinta)}
+  tr:last-child td{border-bottom:0}
+  td.dato{font-family:"Space Mono",monospace;font-size:9.6pt;font-weight:700;white-space:nowrap}
+  td.ruta{font-family:"Space Mono",monospace;font-size:9pt;font-weight:700;white-space:nowrap;color:var(--rio)}
+  .gris{color:var(--grafito)}
+
+  .caso{border:1.6pt solid var(--tinta);border-radius:8pt;padding:7pt 10pt;margin-bottom:5.6pt;page-break-inside:avoid}
+  .caso .cab{display:flex;align-items:baseline;gap:7pt;margin-bottom:3pt}
+  .n{font-family:"Space Mono",monospace;font-size:8pt;font-weight:700;background:var(--tinta);
+     color:#fff;border-radius:99pt;width:17pt;height:17pt;display:inline-flex;
+     align-items:center;justify-content:center;flex:0 0 17pt}
+  .caso h3{font-size:10.4pt}
+  .caso .donde{font-family:"Space Mono",monospace;font-size:8.2pt;color:var(--rio);margin-left:auto;font-weight:700}
+  .caso dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:2.5pt 8pt}
+  .caso dt{font-family:"Space Mono",monospace;font-size:7pt;font-weight:700;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--tenue);padding-top:1.5pt;white-space:nowrap}
+  .caso dd{margin:0}
+  .pie{margin-top:9pt;padding-top:6pt;border-top:1pt solid var(--borde);font-size:8pt;color:var(--grafito)}
+  ul{margin:0 0 7pt;padding-left:14pt} li{margin-bottom:2.5pt}
+</style>
+</head>
+<body>
+
+<!-- ───────────────────────── HOJA 1 ───────────────────────── -->
+<section class="hoja">
+  <header class="tope">
+    <div>
+      <p class="cejilla">Guía de pruebas · Página 1 de 3</p>
+      <h1>Cómo probar la<br>plataforma</h1>
+    </div>
+    <div class="marca">SANTANDER <span>XTREME</span></div>
+  </header>
+
+  <div class="aviso">
+    <p style="margin:0"><strong>Esto es una versión de pruebas.</strong> Nada de lo que
+    hagas aquí es real: no se cobra dinero, no se reserva ningún cupo y todo lo que
+    escribas se puede borrar después. Equivocarte no rompe nada — al contrario, es
+    justo lo que necesitamos.</p>
+  </div>
+
+  <div class="url">
+    <p class="cejilla" style="margin:0">Escribe aquí la dirección que te pasamos</p>
+    <div class="linea"></div>
+  </div>
+
+  <h2>Lo que cambió</h2>
+  <p>Antes se pagaba con tarjeta. <strong>Ahora el ciclista transfiere a las cuentas
+  del evento y sube una foto o PDF del comprobante.</strong> Alguien de la
+  organización lo revisa y lo aprueba a mano. Puede pagar todo de una vez o en
+  hasta tres abonos.</p>
+  <p class="gris">El dorsal solo aparece cuando termina de pagar. Mientras deba algo,
+  ve una constancia que le dice cuánto le falta.</p>
+
+  <h2>Datos para inscribirte de prueba</h2>
+  <p>Usa un documento distinto en cada inscripción: la plataforma no deja repetirlo,
+  igual que en la vida real.</p>
+  <table>
+    <thead><tr><th>Qué vas a probar</th><th>Documento</th><th>Correo</th></tr></thead>
+    <tbody>
+      <tr><td>Paga todo de una vez</td><td class="dato">1080500001</td><td class="dato">prueba1@ejemplo.com</td></tr>
+      <tr><td>Paga en tres abonos</td><td class="dato">1080500002</td><td class="dato">prueba2@ejemplo.com</td></tr>
+      <tr><td>Le rechazan el comprobante</td><td class="dato">1080500003</td><td class="dato">prueba3@ejemplo.com</td></tr>
+      <tr><td>Le cede el cupo a otro</td><td class="dato">1080500004</td><td class="dato">prueba4@ejemplo.com</td></tr>
+    </tbody>
+  </table>
+  <p class="gris">El resto del formulario lo llenas como quieras. Ten en cuenta que
+  la edad debe cuadrar con la categoría: para <em>Senior</em> hay que tener entre 18 y
+  29 años cumplidos al 31 de diciembre de 2027.</p>
+
+  <h2>Como comprobante sirve cualquier cosa</h2>
+  <p>No necesitas un comprobante real. Una captura de pantalla, una foto del celular
+  o cualquier PDF funcionan. Lo único que no acepta son archivos que no sean imagen
+  ni PDF — y eso también vale la pena probarlo.</p>
+
+  <div class="pie">Santander Xtreme 2027 · 10ª edición «El Legado» · Barichara, Santander · 3, 4 y 5 de julio de 2027</div>
+</section>
+
+<!-- ───────────────────────── HOJA 2 ───────────────────────── -->
+<section class="hoja">
+  <header class="tope">
+    <div>
+      <p class="cejilla">Guía de pruebas · Página 2 de 3</p>
+      <h1>Lo que hace<br>el ciclista</h1>
+    </div>
+    <div class="marca">SANTANDER <span>XTREME</span></div>
+  </header>
+
+  <div class="caso">
+    <div class="cab"><span class="n">1</span><h3>Inscribirse y pagar todo de una vez</h3><span class="donde">/inscripcion</span></div>
+    <dl>
+      <dt>Haz</dt><dd>Llena los cinco pasos con el documento <span class="mono">1080500001</span>. En el último elige <strong>pago total</strong>, copia una cuenta y sube cualquier imagen como comprobante.</dd>
+      <dt>Espera</dt><dd>Te da una referencia tipo <span class="mono">SX27-A4F91C</span>. <strong>Anótala.</strong> Todavía no tienes dorsal: el pago está esperando revisión.</dd>
+    </dl>
+  </div>
+
+  <div class="caso">
+    <div class="cab"><span class="n">2</span><h3>Inscribirse y pagar en abonos</h3><span class="donde">/inscripcion</span></div>
+    <dl>
+      <dt>Haz</dt><dd>Igual que antes pero con <span class="mono">1080500002</span>, eligiendo <strong>abonos</strong>. Pon un monto menor al total, por ejemplo 150.000.</dd>
+      <dt>Espera</dt><dd>Acepta el monto parcial y te dice cuánto queda pendiente.</dd>
+    </dl>
+  </div>
+
+  <div class="caso">
+    <div class="cab"><span class="n">3</span><h3>Consultar cómo va mi pago</h3><span class="donde">/mi-inscripcion</span></div>
+    <dl>
+      <dt>Haz</dt><dd>Entra con el documento y el correo que usaste.</dd>
+      <dt>Espera</dt><dd>Ves cuánto llevas <strong>verificado</strong>, cuánto está <strong>en revisión</strong> y cuántos abonos te quedan. Son tres cifras separadas a propósito: lo que está en revisión todavía no cuenta como pagado.</dd>
+    </dl>
+  </div>
+
+  <div class="caso">
+    <div class="cab"><span class="n">4</span><h3>Ver la constancia sin haber pagado todo</h3><span class="donde">/ticket/TU-REFERENCIA</span></div>
+    <dl>
+      <dt>Haz</dt><dd>Abre la dirección con tu referencia al final.</dd>
+      <dt>Espera</dt><dd><strong>No debe salir dorsal ni código QR.</strong> Sale una constancia que dice cuánto falta. El dorsal aparece solo cuando el saldo llega a cero.</dd>
+    </dl>
+  </div>
+
+  <div class="caso">
+    <div class="cab"><span class="n">5</span><h3>Probar desde el celular</h3><span class="donde">/inscripcion</span></div>
+    <dl>
+      <dt>Haz</dt><dd>Repite la inscripción desde el teléfono, y sube una foto de la galería como comprobante.</dd>
+      <dt>Espera</dt><dd>Todo se ve bien sin tener que mover la pantalla de lado. Las fotos pesadas se suben igual: la plataforma las reduce sola.</dd>
+    </dl>
+  </div>
+
+  <div class="caso">
+    <div class="cab"><span class="n">6</span><h3>Intentar cosas que no debería dejar</h3><span class="donde">/inscripcion</span></div>
+    <dl>
+      <dt>Haz</dt><dd>Sube un archivo que no sea imagen ni PDF. Intenta inscribirte otra vez con un documento ya usado. Intenta un cuarto abono.</dd>
+      <dt>Espera</dt><dd>Los tres los rechaza, y te explica por qué en español claro. Si alguno lo deja pasar, avísanos.</dd>
+    </dl>
+  </div>
+
+  <div class="pie">Si algo no funciona, anota en qué página estabas y qué hiciste justo antes. Con eso basta.</div>
+</section>
+
+<!-- ───────────────────────── HOJA 3 ───────────────────────── -->
+<section class="hoja">
+  <header class="tope">
+    <div>
+      <p class="cejilla">Guía de pruebas · Página 3 de 3</p>
+      <h1>Lo que hace la<br>organización</h1>
+    </div>
+    <div class="marca">SANTANDER <span>XTREME</span></div>
+  </header>
+
+  <div class="ojo">
+    <p style="margin:0"><strong>Esta parte es privada.</strong> Las páginas del panel
+    dejan aprobar dinero y ver datos personales de los inscritos.
+    <strong>No compartas estas direcciones ni la clave</strong> con nadie fuera de la
+    organización.</p>
+  </div>
+
+  <div class="url">
+    <p class="cejilla" style="margin:0">Clave del panel</p>
+    <div class="linea"></div>
+  </div>
+
+  <div class="caso">
+    <div class="cab"><span class="n">7</span><h3>Entrar al panel</h3><span class="donde">/panel/entrar</span></div>
+    <dl>
+      <dt>Haz</dt><dd>Escribe tu nombre y la clave.</dd>
+      <dt>Espera</dt><dd>Tu nombre queda guardado junto a cada comprobante que apruebes, para saber después quién revisó qué.</dd>
+    </dl>
+  </div>
+
+  <div class="caso">
+    <div class="cab"><span class="n">8</span><h3>Aprobar un comprobante</h3><span class="donde">/panel/evidencias</span></div>
+    <dl>
+      <dt>Haz</dt><dd>Vas a ver el comprobante al lado de lo que declaró el ciclista. <strong>Cambia el monto</strong> a uno distinto del declarado y aprueba.</dd>
+      <dt>Espera</dt><dd>Avisa que el monto no coincide, pero te deja aprobar el real. Esto pasa todo el tiempo: la gente dice que transfirió 190.000 y transfirió 180.000.</dd>
+    </dl>
+  </div>
+
+  <div class="caso">
+    <div class="cab"><span class="n">9</span><h3>Rechazar un comprobante</h3><span class="donde">/panel/evidencias</span></div>
+    <dl>
+      <dt>Haz</dt><dd>Rechaza uno. Prueba primero sin escribir motivo.</dd>
+      <dt>Espera</dt><dd>Sin motivo no te deja: el ciclista lo va a leer. Al rechazarlo, <strong>no pierde el cupo</strong> y puede volver a subir otro.</dd>
+    </dl>
+  </div>
+
+  <div class="caso">
+    <div class="cab"><span class="n">10</span><h3>Detectar un comprobante repetido</h3><span class="donde">/panel/evidencias</span></div>
+    <dl>
+      <dt>Haz</dt><dd>Sube <em>la misma imagen</em> en dos inscripciones distintas.</dd>
+      <dt>Espera</dt><dd>La segunda aparece marcada, diciendo en qué otra inscripción se usó.</dd>
+    </dl>
+  </div>
+
+  <div class="caso">
+    <div class="cab"><span class="n">11</span><h3>Cederle el cupo a otra persona</h3><span class="donde">/panel/competidor</span></div>
+    <dl>
+      <dt>Haz</dt><dd>Busca una inscripción y cámbiale los datos por los de otra persona.</dd>
+      <dt>Espera</dt><dd>Conserva la referencia, la categoría y todo lo pagado. Queda registrado quién hizo el cambio y cuándo.</dd>
+    </dl>
+  </div>
+
+  <div class="caso">
+    <div class="cab"><span class="n">12</span><h3>Ver los correos que recibe el ciclista</h3><span class="donde">/correos</span></div>
+    <dl>
+      <dt>Haz</dt><dd>Entra y abre cualquiera para verlo tal como llega a la bandeja.</dd>
+      <dt>Espera</dt><dd>Están la confirmación, el aviso de comprobante recibido, el de aprobado y el de rechazado.</dd>
+    </dl>
+  </div>
+
+  <div class="ojo">
+    <p style="margin:0"><strong>Ojo:</strong> los correos todavía <strong>no salen de
+    verdad</strong>. Falta contratar el servicio de envío y el dominio del evento.
+    Por ahora se guardan en esa página para que puedas revisar los textos.</p>
+  </div>
+
+  <div class="pie">¿Encontraste algo raro? Cuéntanos en qué página estabas, qué hiciste y qué esperabas que pasara. Una captura de pantalla ayuda mucho.</div>
+</section>
+
+</body>
+</html>

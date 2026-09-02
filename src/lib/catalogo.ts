@@ -339,22 +339,29 @@ export const MUNICIPIOS: Record<string, string> = {
 
 /** Embajadores y comunidades que traen ciclistas al evento. */
 export const EMBAJADORES = [
-  "TEAM4AM – Bucaramanga",
-  "PICHURRIASBIKE – Bucaramanga",
-  "CANDELEROSRACE – Bogotá",
-  "DANIELAFONSECA – Bogotá",
-  "PERFUMADOSMTB – Barbosa",
-  "YERALJARAMILLO – Ocaña",
-  "ULTRABGA – Bucaramanga",
-  "MIKEORTIZ – Bucaramanga",
-  "PARCEROSSANTANDER",
-  "SUSSY PEREZ – Barbosa",
-  "TEAMBOYACA – Duitama",
-  "PARCEROSMEDELLIN",
-  "TEAM_CUERVOSBIKE – San Gil",
-  "TIENDABIKEFULL – Piedecuesta",
-  "DEMENTESBIKE – Bogotá",
-  "EVOLUTIONMTB – Bogotá",
+  // Orden y grafía tal como los envía la organización. Las ciudades van
+  // completas y no abreviadas: en un desplegable para ciclistas de todo el
+  // país, "BGA" no lo lee igual alguien de Nariño que alguien de Santander.
+  "PichurriasBike – Bucaramanga",
+  "Team4am – Bucaramanga",
+  "CandelerosRace – Bogotá",
+  "DanielaFonseca – Bogotá",
+  "PerfumadosMtb – Barbosa",
+  "YeraldineJaramillo – Ocaña",
+  "Ultrabga – Bucaramanga",
+  "MikeOrtiz – Bucaramanga",
+  "ParcerosSantander – Bucaramanga",
+  "SussyPerez – Barbosa",
+  "TeamBoyaca – Duitama",
+  "ParcerosMedellin – Medellín",
+  "TeamCuervosBike – San Gil",
+  "TiendaBikeFull – Piedecuesta",
+  "DementesBike – Bogotá",
+  "Evolutionbike – Bogotá",
+  "Chocorramito – Bogotá",
+  "GoyeBike – Bogotá",
+  "EspecializedBucaramanga – Bucaramanga",
+  "EspecializedTunja – Tunja",
 ];
 
 /** Opción del selector que abre el campo libre para una comunidad nueva. */

@@ -117,17 +117,28 @@ export default function Inicio() {
         </section>
 
         {/* ------------------------------ Cinta ------------------------------ */}
-        <div className="overflow-hidden border-y-[3px] border-tinta bg-turquesa py-3">
-          <div className="flex w-max animate-ticker gap-10 pr-10">
-            {[...CINTA, ...CINTA, ...CINTA, ...CINTA].map((t, i) => (
-              <span
-                key={i}
-                className="raya-mono whitespace-nowrap text-[0.82rem] font-bold uppercase tracking-[0.14em] text-tinta"
+        {/*
+          Antes esto deslizaba en bucle. Se cambió a una fila fija: son los
+          datos que alguien mira una vez para decidir si le interesa la
+          carrera, y esperar a que pase el que te falta es trabajo que no
+          debería costarle a nadie.
+        */}
+        <div className="border-y-[3px] border-tinta bg-turquesa">
+          <ul className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-center gap-x-7 gap-y-2 px-4 py-3 sm:gap-x-10 sm:px-6">
+            {/*
+              Sin separadores entre elementos: al envolver en dos filas, el
+              último de cada fila se quedaba con un rombo colgando. Los separa
+              el espacio.
+            */}
+            {CINTA.map((t) => (
+              <li
+                key={t}
+                className="raya-mono text-[0.7rem] font-bold uppercase tracking-[0.12em] text-tinta sm:text-[0.82rem]"
               >
-                {t} <span className="text-tinta/75">◆</span>
-              </span>
+                {t}
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
 
         {/* ------------------------------ Cartel ----------------------------- */}

@@ -7,7 +7,7 @@ import {
   PRECIO_INSCRIPCION,
   categoriaPorCodigo,
 } from "@/lib/catalogo";
-import { hayPlazoParaDosCuotas, planDeDosCuotas } from "@/lib/dinero";
+import { planDeCuotas, planesViables } from "@/lib/dinero";
 
 export const metadata = {
   title: `Inscripción — ${NOMBRE_COMPLETO}`,
@@ -21,14 +21,20 @@ export default async function PaginaInscripcion({
   const valida = codigo && categoriaPorCodigo(codigo) ? codigo : undefined;
 
   /*
-    El plan de dos cuotas se ancla a la fecha de inscripción, y la inscripción
+    Los planes de cuotas se anclan a la fecha de inscripción, y la inscripción
     todavía no existe: nace cuando el ciclista envía el formulario, un rato
-    después de esta petición. Se calcula con la fecha de hoy porque en la
-    práctica es el mismo día; la fecha que manda —y la que se muestra en
-    `/mi-inscripcion`— es la que se deriva de `creadaEn` en el servidor.
+    después de esta petición. Se calculan con la fecha de hoy porque en la
+    práctica es el mismo día; las fechas que mandan —y las que se muestran en
+    `/mi-inscripcion`— son las que se derivan de `creadaEn` en el servidor.
+
+    Solo viajan los planes que caben: si la última cuota no llega antes del
+    cierre, el plan no se ofrece y el formulario explica por qué falta.
   */
   const hoy = new Date().toISOString();
-  const plan = planDeDosCuotas(PRECIO_INSCRIPCION, hoy);
+  const planes = planesViables(hoy).map((cuotas) => ({
+    cuotas,
+    cuotasDelPlan: planDeCuotas(PRECIO_INSCRIPCION, hoy, cuotas),
+  }));
 
   return (
     <>
@@ -44,8 +50,7 @@ export default async function PaginaInscripcion({
           categoriaInicial={valida}
           cuentas={CUENTAS_RECAUDO}
           fechaLimite={FECHA_LIMITE_ABONOS}
-          plan={plan}
-          dosCuotas={hayPlazoParaDosCuotas(hoy)}
+          planes={planes}
         />
       </main>
     </>

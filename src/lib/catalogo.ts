@@ -44,36 +44,45 @@ export const DIA_DE_COBRO = 5;
 /* ------------------------- Pago manual por transferencia ------------------- */
 
 /**
- * Cuántos comprobantes admite el plan diferido — ver
+ * Los planes de pago que ofrece la organización, en número de cuotas — ver
  * docs/decisiones-pago-manual.md §1.
  *
- * Son exactamente dos porque el plan son dos cuotas iguales, no una bolsa de
- * abonos libres: el número de comprobantes y el número de cuotas son la misma
- * cosa. Cambiarlo aquí cambia el reparto (`montosDelPlan`) y todos los textos.
+ * El número de cuotas es a la vez el número de comprobantes: uno por cuota, no
+ * una bolsa de abonos libres. "1 cuota" es el pago total de siempre, modelado
+ * como un plan más para no mantener dos caminos.
+ *
+ * Va de menos a más a propósito: el orden es el que ve el ciclista y el que
+ * recorre `planesViables` para decidir cuál le corresponde a un comprobante.
  */
-export const MAX_ABONOS = 2;
+export const PLANES_DE_CUOTAS = [1, 2, 3] as const;
+
+/** El plan más largo que existe. Ningún comprobante más allá de este es válido. */
+export const MAX_CUOTAS = Math.max(...PLANES_DE_CUOTAS);
 
 /**
- * Días de plazo entre la primera cuota y la segunda — ver
+ * Días de plazo entre dos cuotas consecutivas — ver
  * docs/decisiones-pago-manual.md §2.
  *
  * Se cuentan desde la fecha de inscripción, no desde que la organización
- * verifica el primer comprobante: el ciclista no controla cuándo revisamos, y
- * anclarlo a la revisión le movería la fecha bajo los pies.
+ * verifica el comprobante anterior: el ciclista no controla cuándo revisamos, y
+ * anclarlo a la revisión le movería las fechas bajo los pies. Con tres cuotas
+ * la última cae a los 90 días.
  */
 export const DIAS_ENTRE_CUOTAS = 45;
 
 /**
- * Margen mínimo, en días, que tiene que quedar hasta `FECHA_LIMITE_ABONOS`
- * para poder ofrecer el plan de dos cuotas.
+ * Margen mínimo, en días, que tiene que quedar entre la **última** cuota de un
+ * plan y `FECHA_LIMITE_ABONOS` para poder ofrecerlo.
  *
- * Por qué existe: la segunda cuota se acota contra el cierre, así que quien se
- * inscriba muy tarde vería "dos cuotas" con las dos fechas casi pegadas. Con
- * menos de dos semanas de separación el plan deja de ser un plazo y pasa a ser
- * una trampa —hay que transferir, y además nos tiene que dar tiempo de
- * revisarlo antes del cierre—, así que en ese caso solo se ofrece pago total.
+ * Por qué existe: cada fecha se acota contra el cierre, así que quien se
+ * inscriba tarde vería un plan con las fechas aplastadas una contra otra. Con
+ * menos de dos semanas de separación el plazo deja de serlo y pasa a ser una
+ * trampa —hay que transferir, y además nos tiene que dar tiempo de revisarlo
+ * antes del cierre—, así que ese plan no se ofrece y la interfaz dice por qué.
+ *
+ * El pago total (una cuota) no pasa por este filtro: se admite hasta el cierre.
  */
-export const MARGEN_MINIMO_DOS_CUOTAS = 15;
+export const MARGEN_MINIMO_CUOTAS = 15;
 
 /**
  * DECISIÓN PENDIENTE DE CONFIRMAR — ver docs/decisiones-pago-manual.md §4.

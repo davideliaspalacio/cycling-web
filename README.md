@@ -5,7 +5,7 @@ de montaña (MTB · XCM · 2 etapas) del 3 al 5 de julio de 2027 en Barichara,
 Santander.
 
 El ciclista se inscribe en cinco pasos, paga **por transferencia bancaria** —de
-una o hasta en tres abonos— y **adjunta el comprobante**. La organización lo
+una, en dos o en tres cuotas— y **adjunta el comprobante**. La organización lo
 revisa a mano y aprueba. Cuando el saldo llega a cero, sale el dorsal.
 
 ## Arranque
@@ -71,7 +71,7 @@ flowchart LR
   C --> D["4· Legales"] --> E["5· Pago"]
   E --> F{"¿Cómo paga?"}
   F -->|Total| G["Transfiere $380.000"]
-  F -->|Abonos| H["Transfiere el primero<br/>máximo 3"]
+  F -->|2 o 3 cuotas| H["Transfiere la primera<br/>una por cuota"]
   G --> I["Adjunta comprobante"]
   H --> I
   I --> J["EN_VERIFICACION"]
@@ -80,7 +80,7 @@ flowchart LR
   K -->|Rechaza| M["Vuelve a subir<br/>el cupo no se pierde"]
   M --> I
   L -->|Sí| N["COMPLETA · sale el dorsal"]
-  L -->|No| O["Abona lo que falta"]
+  L -->|No| O["Paga la siguiente cuota"]
   O --> I
 ```
 
@@ -100,20 +100,35 @@ no es una tabla de cuotas programadas sino la suma de los abonos verificados.
 saldo = total − Σ(abonos verificados)
 ```
 
-### Las dos formas de pagar
+### Las tres formas de pagar
 
-- **Pago total**: un movimiento por $380.000.
-- **Dos cuotas**: $190.000 al inscribirse y $190.000 **45 días después**.
+| Plan | Cuotas | Cuándo |
+| --- | --- | --- |
+| Pago total | $380.000 | Al inscribirse |
+| Dos cuotas | $190.000 · $190.000 | Día 0 y día 45 |
+| Tres cuotas | $127.000 · $127.000 · $126.000 | Día 0, día 45 y día 90 |
 
-La fecha de la segunda cuota se ancla a la inscripción, no a cuándo se
-verifique la primera: el ciclista no controla cuándo revisa la organización,
-así que ve las dos fechas desde el minuto uno.
+El pago total **es** el plan de una cuota: internamente es el mismo modelo con
+`n = 1`, y solo la interfaz lo nombra aparte. El número de cuotas es también el
+de comprobantes —uno por cuota— y queda guardado en la inscripción (`TOTAL`,
+`ABONOS_2`, `ABONOS_3`); lo fija el monto del **primer** comprobante, no una
+casilla del formulario.
 
-Esa fecha se acota contra el cierre de comprobantes —`min(inscripción + 45
-días, FECHA_LIMITE_ABONOS)`—, porque si no, quien se inscriba a tres semanas
-de la carrera tendría la segunda cuota **después** de correrla. Y cuando ya no
-quedan 15 días de margen, el plan directamente no se ofrece: la página lo
-explica en vez de aceptarlo y fallar más tarde.
+Las fechas se anclan a la inscripción, no a cuándo se verifique la cuota
+anterior: el ciclista no controla cuándo revisa la organización, así que las ve
+todas desde el minuto uno.
+
+Cada una se acota contra el cierre de comprobantes —`min(inscripción + (n−1)×45
+días, FECHA_LIMITE_ABONOS)`—, porque si no, quien se inscriba a tres semanas de
+la carrera tendría la última cuota **después** de correrla. Y un plan cuya
+última cuota no deje 15 días de margen antes del cierre directamente no se
+ofrece: la página muestra solo los que caben y explica por qué faltan los
+otros, en vez de aceptarlo y fallar más tarde. Con el cierre el 3 de junio de
+2027, el plan de tres deja de ofrecerse el 19 de febrero y el de dos el 5 de
+abril; el pago total se recibe hasta el cierre.
+
+Si un comprobante cubre el total, la inscripción queda saldada y las cuotas que
+quedaban desaparecen.
 
 Un comprobante **rechazado no gasta intento**. El excedente (si alguien
 transfiere de más) se expone aparte y **nunca** hace el saldo negativo.

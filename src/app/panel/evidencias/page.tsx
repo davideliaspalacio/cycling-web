@@ -9,13 +9,13 @@ import {
   inscripcionPorId,
 } from "@/lib/almacen";
 import {
-  MAX_ABONOS,
   NOMBRE_COMPLETO,
   categoriaPorCodigo,
   cuentaDeCanal,
 } from "@/lib/catalogo";
 import {
   abonadoVerificado,
+  cuotasDelPlan,
   excedente,
   fechaLarga,
   montosDelPlan,
@@ -170,6 +170,10 @@ function Comprobante({ fila }: { fila: Fila }) {
     : undefined;
   const cuenta = cuentaDeCanal(abono.canal);
   const total = inscripcion?.total ?? 0;
+  // El plan de ESTA inscripción: cuántas cuotas admite y cuánto vale cada una.
+  // Sin eso, "cuota 2 de 2" mentiría para quien va por el plan de tres.
+  const cuotas = inscripcion ? cuotasDelPlan(inscripcion.plan) : 1;
+  const montos = inscripcion ? montosDelPlan(inscripcion.total, cuotas) : [];
   // Lo declarado sobre lo ya verificado: el aviso tiene que estar antes de
   // aprobar, no después.
   const seExcede = verificado + abono.montoDeclarado > total;
@@ -181,7 +185,7 @@ function Comprobante({ fila }: { fila: Fila }) {
           {abono.estado === "EN_REVISION" ? "En revisión" : "Sin revisar"}
         </Chip>
         <Chip tono="nube">
-          Cuota {abono.numero} de {MAX_ABONOS}
+          Cuota {abono.numero} de {cuotas}
         </Chip>
         <span className="raya-mono text-[0.7rem] text-tinta/75">
           Subido el{" "}
@@ -255,8 +259,8 @@ function Comprobante({ fila }: { fila: Fila }) {
                   constantemente—, pero tiene que ver contra qué se compara.
                 */}
                 <Dato
-                  etiqueta={`Cuota ${abono.numero} del plan`}
-                  valor={pesos(montosDelPlan(inscripcion.total)[abono.numero - 1] ?? inscripcion.total)}
+                  etiqueta={`Cuota ${abono.numero} de ${cuotas} del plan`}
+                  valor={pesos(montos[abono.numero - 1] ?? inscripcion.total)}
                 />
                 <Dato etiqueta="Ya verificado" valor={pesos(verificado)} />
                 <Dato

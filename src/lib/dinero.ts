@@ -3,10 +3,10 @@ import {
   DIAS_ENTRE_CUOTAS,
   DIA_DE_COBRO,
   FECHA_LIMITE_ABONOS,
-  MARGEN_MINIMO_DOS_CUOTAS,
-  MAX_ABONOS,
+  MARGEN_MINIMO_CUOTAS,
+  PLANES_DE_CUOTAS,
 } from "./catalogo";
-import type { Abono, Cuota, EstadoInscripcion } from "./tipos";
+import type { Abono, Cuota, EstadoInscripcion, PlanPago } from "./tipos";
 
 const formatoCOP = new Intl.NumberFormat("es-CO", {
   style: "currency",
@@ -23,8 +23,8 @@ export function pesos(valor: number): string {
  * garantizando que la suma sea exactamente el total.
  *
  * Sobrevive al retiro de la pasarela porque es lo que parte el precio en las
- * dos cuotas del plan: 380.000 en 2 → 190.000 · 190.000.
- * (Con la pasarela era 380.000 en 4 → 95.000 × 4.)
+ * cuotas del plan: 380.000 en 2 → 190.000 · 190.000, y en 3 → 127.000 ·
+ * 127.000 · 126.000. (Con la pasarela era 380.000 en 4 → 95.000 × 4.)
  */
 export function repartirEnCuotas(total: number, n = CUOTAS_DEL_PLAN): number[] {
   const base = Math.floor(total / n / 1000) * 1000;
@@ -44,16 +44,17 @@ function isoFecha(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-/* ------------------------- El plan de dos cuotas --------------------------- */
+/* --------------------------- Los planes de cuotas -------------------------- */
 
 /**
- * Los montos de las dos cuotas. 380.000 → [190.000, 190.000].
+ * Los montos de un plan de `cuotas` cuotas. 380.000 en 3 → [127.000, 127.000,
+ * 126.000].
  *
  * Sale de `repartirEnCuotas` y no de una división a pelo para que un precio que
- * no parta en mitades exactas siga sumando el total al peso.
+ * no parta en partes exactas siga sumando el total al peso.
  */
-export function montosDelPlan(total: number): number[] {
-  return repartirEnCuotas(total, MAX_ABONOS);
+export function montosDelPlan(total: number, cuotas: number): number[] {
+  return repartirEnCuotas(total, Math.max(1, cuotas));
 }
 
 /** La parte de fecha de un ISO, venga con hora (`creadaEn`) o sin ella. */
@@ -68,29 +69,56 @@ export function sumarDias(iso: string, dias: number): string {
 }
 
 /**
- * Cuándo vence la segunda cuota.
+ * Cuándo vence la cuota `numero` (1 es la primera) de una inscripción creada
+ * en `inscritaEl`.
  *
- * Dos reglas y en este orden: 45 días desde la **fecha de inscripción** (no
- * desde que verificamos la primera cuota), y nunca después del cierre de
- * recepción de comprobantes. Sin ese tope, quien se inscriba el 20 de mayo de
- * 2027 tendría la segunda cuota el 4 de julio: un día después de la carrera.
+ * Dos reglas y en este orden: 45 días por cada cuota anterior desde la **fecha
+ * de inscripción** (no desde que verificamos la cuota previa), y nunca después
+ * del cierre de recepción de comprobantes. Sin ese tope, quien se inscriba el
+ * 20 de mayo de 2027 tendría la segunda cuota el 4 de julio: un día después de
+ * la carrera.
+ *
+ * La cuota 1 vence el día mismo de la inscripción: se paga en el acto, es lo
+ * que reserva el cupo.
  */
-export function fechaSegundaCuota(inscritaEl: string): string {
-  const natural = sumarDias(inscritaEl, DIAS_ENTRE_CUOTAS);
+export function fechaDeCuota(inscritaEl: string, numero: number): string {
+  const natural = sumarDias(inscritaEl, (numero - 1) * DIAS_ENTRE_CUOTAS);
   return natural > FECHA_LIMITE_ABONOS ? FECHA_LIMITE_ABONOS : natural;
 }
 
 /**
- * Si a esta fecha todavía cabe un plan de dos cuotas con sentido.
+ * Si a esta fecha todavía cabe un plan de `cuotas` cuotas con sentido.
  *
- * Cuando falta poco para el cierre, el tope de `fechaSegundaCuota` aplasta las
- * dos fechas una contra otra. Antes que ofrecer un plazo que no existe, se
- * ofrece solo pago total (docs/decisiones-pago-manual.md §1).
+ * La condición es que la **última** cuota, sin acotar, caiga al menos
+ * `MARGEN_MINIMO_CUOTAS` días antes del cierre. Cuando no cabe, el tope contra
+ * el cierre aplasta las fechas unas contra otras y el "plazo" deja de serlo;
+ * antes que ofrecer un plan que no existe, se ofrecen solo los que caben y la
+ * interfaz explica por qué (docs/decisiones-pago-manual.md §1).
+ *
+ * El pago total —una cuota— siempre cabe: se recibe hasta el cierre.
  */
-export function hayPlazoParaDosCuotas(hoy: string | Date = new Date()): boolean {
+export function cabePlanDeCuotas(
+  cuotas: number,
+  hoy: string | Date = new Date(),
+): boolean {
+  if (cuotas <= 1) return true;
   const desde = typeof hoy === "string" ? soloFecha(hoy) : isoFecha(hoy);
-  return diasHasta(FECHA_LIMITE_ABONOS, new Date(`${desde}T00:00:00Z`)) >=
-    MARGEN_MINIMO_DOS_CUOTAS;
+  const necesarios =
+    (cuotas - 1) * DIAS_ENTRE_CUOTAS + MARGEN_MINIMO_CUOTAS;
+  return (
+    diasHasta(FECHA_LIMITE_ABONOS, new Date(`${desde}T00:00:00Z`)) >= necesarios
+  );
+}
+
+/** Los planes que se le pueden ofrecer a quien se inscribe hoy. Siempre trae el de 1. */
+export function planesViables(hoy: string | Date = new Date()): number[] {
+  return PLANES_DE_CUOTAS.filter((n) => cabePlanDeCuotas(n, hoy));
+}
+
+/** El plan más largo que todavía cabe. Es el que fija el mínimo del primer comprobante. */
+export function maxCuotasViables(hoy: string | Date = new Date()): number {
+  const viables = planesViables(hoy);
+  return viables[viables.length - 1] ?? 1;
 }
 
 export type CuotaDelPlan = {
@@ -101,21 +129,70 @@ export type CuotaDelPlan = {
 };
 
 /**
- * El plan completo tal como se le enseña al ciclista: los dos montos y las dos
- * fechas, desde el minuto uno. La primera vence el día de la inscripción —se
- * paga en el acto—, la segunda 45 días después o en el cierre, lo que llegue
- * antes.
+ * El plan completo tal como se le enseña al ciclista: todos los montos y todas
+ * las fechas, desde el minuto uno. La primera vence el día de la inscripción
+ * —se paga en el acto—, cada siguiente 45 días después de la anterior, o en el
+ * cierre, lo que llegue antes.
  */
-export function planDeDosCuotas(
+export function planDeCuotas(
   total: number,
   inscritaEl: string,
+  cuotas: number,
 ): CuotaDelPlan[] {
-  const montos = montosDelPlan(total);
-  return montos.map((monto, i) => ({
+  return montosDelPlan(total, cuotas).map((monto, i) => ({
     numero: i + 1,
     monto,
-    vence: i === 0 ? soloFecha(inscritaEl) : fechaSegundaCuota(inscritaEl),
+    vence: fechaDeCuota(inscritaEl, i + 1),
   }));
+}
+
+/**
+ * La primera cuota del plan que el dinero verificado todavía no cubre.
+ *
+ * Es lo que ancla recordatorios, mora y el monto del próximo comprobante: la
+ * fecha que le importa a una inscripción es la de su siguiente cuota
+ * pendiente, no la del cierre general ni la de una cuota fija.
+ */
+export function proximaCuotaDelPlan(
+  plan: CuotaDelPlan[],
+  verificado: number,
+): CuotaDelPlan | undefined {
+  let acumulado = 0;
+  for (const cuota of plan) {
+    acumulado += cuota.monto;
+    if (verificado < acumulado) return cuota;
+  }
+  return undefined;
+}
+
+/* ------------------- El plan comprometido de una inscripción --------------- */
+
+/**
+ * En cuántas cuotas quedó una inscripción.
+ *
+ * El número vive en `plan` porque la tabla no tiene una columna para él y
+ * porque hay sitios —los correos, la constancia— que solo tienen la
+ * inscripción a mano y no sus abonos. `ABONOS` a secas es el valor histórico
+ * de cuando el único plan diferido eran dos cuotas, y sigue queriendo decir
+ * eso; los planes nuevos se escriben con su número.
+ */
+export function cuotasDelPlan(plan: PlanPago): number {
+  switch (plan) {
+    case "ABONOS_3":
+      return 3;
+    case "ABONOS_2":
+    case "ABONOS":
+      return 2;
+    default:
+      return 1;
+  }
+}
+
+/** El valor que se guarda en `plan` para un plan de `cuotas` cuotas. */
+export function planPagoDeCuotas(cuotas: number): PlanPago {
+  if (cuotas >= 3) return "ABONOS_3";
+  if (cuotas === 2) return "ABONOS_2";
+  return "TOTAL";
 }
 
 /**

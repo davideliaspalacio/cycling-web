@@ -10,12 +10,18 @@ import {
   CUENTAS_RECAUDO,
   EVENTO,
   FECHA_LIMITE_ABONOS,
-  MAX_ABONOS,
   PRENDAS,
   categoriaPorCodigo,
   recorridoDe,
 } from "@/lib/catalogo";
-import { fechaLarga, fechaSegundaCuota, pesos, saldoPendiente } from "@/lib/dinero";
+import {
+  cuotasDelPlan,
+  fechaLarga,
+  pesos,
+  planDeCuotas,
+  proximaCuotaDelPlan,
+  saldoPendiente,
+} from "@/lib/dinero";
 import { resumenDePago } from "@/lib/servicio";
 import type { Inscripcion } from "@/lib/tipos";
 
@@ -225,18 +231,25 @@ function Constancia({
   const pct = Math.min(100, Math.round((abonado / ins.total) * 100));
   // La constancia también lleva la fecha comprometida: es el papel que el
   // ciclista imprime o guarda, y si solo dijera el cierre general se le pasaría
-  // el vencimiento de su segunda cuota.
-  const venceSegunda =
-    ins.medioPago === "TRANSFERENCIA" && ins.plan === "ABONOS"
-      ? fechaSegundaCuota(ins.creadaEn)
-      : null;
+  // el vencimiento de su próxima cuota.
+  const cuotas = cuotasDelPlan(ins.plan);
+  const plan =
+    ins.medioPago === "TRANSFERENCIA" && cuotas > 1
+      ? planDeCuotas(ins.total, ins.creadaEn, cuotas)
+      : [];
+  const siguiente = proximaCuotaDelPlan(plan, abonado);
+  const venceProxima =
+    siguiente && siguiente.numero > 1 ? siguiente : null;
 
   const datos: [string, string][] = [
     ["Categoría", categoria],
     ...(recorrido ? ([["Recorrido", recorrido]] as [string, string][]) : []),
-    ...(venceSegunda
+    ...(venceProxima
       ? ([
-          [`Cuota ${MAX_ABONOS} de ${MAX_ABONOS}`, fechaLarga(venceSegunda)],
+          [
+            `Cuota ${venceProxima.numero} de ${cuotas}`,
+            fechaLarga(venceProxima.vence),
+          ],
         ] as [string, string][])
       : []),
     ["Sangre", ins.ciclista.rh],
@@ -341,13 +354,19 @@ function Constancia({
               Cómo terminar de pagar
             </h2>
             <p className="mt-2 text-[0.9rem] leading-relaxed text-tinta/75">
-              {venceSegunda ? (
+              {venceProxima ? (
                 <>
-                  Te falta la segunda y última cuota:{" "}
-                  <strong className="text-tinta">{pesos(saldo)}</strong>, con
-                  plazo hasta el{" "}
+                  Te falta la cuota {venceProxima.numero} de {cuotas}:{" "}
                   <strong className="text-tinta">
-                    {fechaLarga(venceSegunda)}
+                    {pesos(
+                      venceProxima.numero === cuotas
+                        ? saldo
+                        : Math.min(venceProxima.monto, saldo),
+                    )}
+                  </strong>
+                  , con plazo hasta el{" "}
+                  <strong className="text-tinta">
+                    {fechaLarga(venceProxima.vence)}
                   </strong>
                   . Transfiere a una de estas cuentas y sube el comprobante desde
                   tu página de inscripción.
@@ -379,7 +398,8 @@ function Constancia({
 
         <p className="mt-5 text-[0.82rem] leading-relaxed text-tinta/75 print:hidden">
           Esta constancia acredita tu cupo, no tu pago completo. El ticket con
-          dorsal aparece aquí mismo apenas verifiquemos la última cuota.
+          dorsal aparece aquí mismo apenas verifiquemos la cuota que salda la
+          inscripción.
         </p>
       </main>
     </>

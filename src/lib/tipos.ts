@@ -52,9 +52,21 @@ export type EstadoInscripcion =
 /**
  * CONTADO y CUOTAS son los valores del cobro con pasarela; siguen en la base y
  * no se pueden retirar del tipo sin romper las inscripciones ya guardadas.
- * TOTAL y ABONOS son los del pago manual por transferencia.
+ *
+ * Los del pago manual por transferencia dicen además **en cuántas cuotas**
+ * quedó la inscripción, porque la tabla no tiene columna para ese número:
+ * TOTAL es una cuota (el pago total), ABONOS_2 dos y ABONOS_3 tres. `ABONOS` a
+ * secas es histórico —de cuando el único plan diferido eran dos cuotas— y se
+ * lee como dos; no se escribe más. La traducción vive en `cuotasDelPlan`
+ * (`src/lib/dinero.ts`), que es el único sitio que conoce esta correspondencia.
  */
-export type PlanPago = "CONTADO" | "CUOTAS" | "TOTAL" | "ABONOS";
+export type PlanPago =
+  | "CONTADO"
+  | "CUOTAS"
+  | "TOTAL"
+  | "ABONOS"
+  | "ABONOS_2"
+  | "ABONOS_3";
 
 /** Cómo paga esta inscripción: la pasarela vieja o transferencia manual. */
 export type MedioPago = "WOMPI" | "TRANSFERENCIA";
@@ -82,7 +94,11 @@ export type Abono = {
   id: string;
   inscripcionId: string;
   creadoEn: string;
-  /** 1 o 2: la cuota del plan a la que corresponde. Ver MAX_ABONOS. */
+  /**
+   * De 1 a 3: la cuota del plan a la que corresponde. El tope real es el
+   * número de cuotas de **esta** inscripción (`cuotasDelPlan`), no una
+   * constante global; MAX_CUOTAS es solo el techo de todos los planes.
+   */
   numero: number;
   canal: CanalPago;
   /** En pesos, no centavos. Lo que dice el ciclista que transfirió. */

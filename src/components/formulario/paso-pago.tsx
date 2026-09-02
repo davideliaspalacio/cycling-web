@@ -3,12 +3,16 @@
 import { useState } from "react";
 import { Boton, Chip, Tarjeta } from "@/components/ui";
 import type { CuentaRecaudo } from "@/lib/catalogo";
-import { MAX_ABONOS, PRENDAS, recorridoDe } from "@/lib/catalogo";
-import type { CuotaDelPlan } from "@/lib/dinero";
+import { DIAS_ENTRE_CUOTAS, MAX_CUOTAS, PRENDAS, recorridoDe } from "@/lib/catalogo";
 import { fechaLarga, pesos } from "@/lib/dinero";
 import type { Categoria, DatosCiclista, Tallas } from "@/lib/tipos";
 import { CajaEvidencia, type AbonoRegistrado } from "./caja-evidencia";
 import { CuentasRecaudo } from "./cuentas-recaudo";
+import {
+  OpcionesDePlan,
+  TablaDelPlan,
+  type PlanOfrecido,
+} from "./planes-de-pago";
 
 /**
  * El paso de pago: transferencia manual con comprobante.
@@ -23,14 +27,6 @@ import { CuentasRecaudo } from "./cuentas-recaudo";
  * el respaldo del repositorio en vez de la cuenta real.
  */
 
-/**
- * Los dos únicos caminos: todo de una, o las dos cuotas del plan. Lo que queda
- * guardado lo decide el servidor según el monto que realmente entre, pero aquí
- * ya no es una guía: los montos son fijos y el servidor rechaza un comprobante
- * por debajo de la cuota.
- */
-type Modo = "TOTAL" | "CUOTAS";
-
 export function PasoPago({
   referencia,
   categoria,
@@ -38,8 +34,7 @@ export function PasoPago({
   tallas,
   cuentas,
   fechaLimite,
-  plan,
-  dosCuotas,
+  planes,
   onCompletado,
 }: {
   referencia: string;
@@ -49,24 +44,32 @@ export function PasoPago({
   cuentas: CuentaRecaudo[];
   /** Último día para subir un comprobante (ISO, YYYY-MM-DD). */
   fechaLimite: string;
-  /** Las dos cuotas con sus dos fechas, calculadas en el servidor. */
-  plan: CuotaDelPlan[];
   /**
-   * Si al día de hoy todavía cabe el plan de dos cuotas. Cuando falta poco
-   * para el cierre no se ofrece: la segunda cuota se acota contra esa fecha y
-   * quedaría pegada a la primera.
+   * Los planes que todavía caben antes del cierre, con todos sus montos y
+   * todas sus fechas, calculados en el servidor. Los que no caben no llegan:
+   * la segunda o la tercera cuota se acotarían contra esa fecha y quedarían
+   * pegadas a la anterior, así que en vez de ofrecerlos y fallar al subir el
+   * comprobante, se explica abajo por qué no están.
    */
-  dosCuotas: boolean;
+  planes: PlanOfrecido[];
   onCompletado: () => void;
 }) {
-  const [modo, setModo] = useState<Modo>("TOTAL");
+  // El plan de una cuota —el pago total— siempre está y es el que arranca
+  // elegido: es el que no compromete a nada.
+  const [cuotas, setCuotas] = useState(1);
   const [exito, setExito] = useState<AbonoRegistrado | null>(null);
 
-  const segunda = plan[plan.length - 1];
-  const enCuotas = dosCuotas && modo === "CUOTAS";
+  const elegido =
+    planes.find((p) => p.cuotas === cuotas) ?? planes[0] ?? null;
+  const plan = elegido?.cuotasDelPlan ?? [];
+  const enCuotas = plan.length > 1;
+  const ultima = plan[plan.length - 1];
   // Lo que el ciclista tiene que transferir ahora mismo. No es una sugerencia:
   // el servidor rechaza un comprobante por debajo de esta cifra.
   const aTransferir = enCuotas ? plan[0].monto : categoria.precio;
+  // Cuántas cuotas admitiría el calendario si no hubiera cierre. Sirve para
+  // decir qué falta y por qué.
+  const faltanPlanes = planes.length < MAX_CUOTAS;
 
   const recorrido = recorridoDe(categoria);
   const resumen: [string, string][] = [
@@ -115,12 +118,23 @@ export function PasoPago({
           </a>
         </div>
 
-        {exito.montoDeclarado < categoria.precio && (
+        {exito.montoDeclarado < categoria.precio && plan.length > 1 && (
           <p className="mt-6 rounded-2xl border-[3px] border-tinta bg-sol px-4 py-3 text-[0.9rem] font-semibold leading-snug text-tinta">
-            Te queda la segunda y última cuota:{" "}
-            {pesos(categoria.precio - exito.montoDeclarado)}, con plazo hasta el{" "}
-            {fechaLarga(segunda.vence)}. Te lo recordamos por correo antes de
-            esa fecha.
+            {plan.length === 2 ? (
+              <>
+                Te queda la segunda y última cuota:{" "}
+                {pesos(categoria.precio - exito.montoDeclarado)}, con plazo
+                hasta el {fechaLarga(ultima.vence)}.
+              </>
+            ) : (
+              <>
+                Te quedan {plan.length - 1} cuotas por{" "}
+                {pesos(categoria.precio - exito.montoDeclarado)} en total: la
+                siguiente el {fechaLarga(plan[1].vence)} y la última el{" "}
+                {fechaLarga(ultima.vence)}.
+              </>
+            )}{" "}
+            Te lo recordamos por correo antes de cada fecha.
           </p>
         )}
 
@@ -170,71 +184,44 @@ export function PasoPago({
           ¿Cómo quieres pagar?
         </legend>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <OpcionPlan
-            activa={modo === "TOTAL"}
-            onElegir={() => setModo("TOTAL")}
-            titulo="Pago total"
-            monto={pesos(categoria.precio)}
-            detalle="Una sola transferencia y queda listo. El cupo se confirma cuando verifiquemos el comprobante."
-            tono="turquesa"
-          />
-          {dosCuotas && (
-            <OpcionPlan
-              activa={modo === "CUOTAS"}
-              onElegir={() => setModo("CUOTAS")}
-              titulo={`${MAX_ABONOS} cuotas de ${pesos(plan[0].monto)}`}
-              monto={`${pesos(plan[0].monto)} hoy`}
-              detalle={`La segunda, otros ${pesos(segunda.monto)}, vence el ${fechaLarga(segunda.vence)}. Sin recargo: suman ${pesos(categoria.precio)} exactos.`}
-              tono="sol"
-            />
-          )}
-        </div>
+        <OpcionesDePlan
+          opciones={planes}
+          elegido={cuotas}
+          onElegir={setCuotas}
+          total={categoria.precio}
+        />
 
         {/*
-          Las dos fechas y los dos montos, antes de decidir. Es la información
-          que convierte "dos cuotas" en un compromiso concreto en vez de una
-          promesa vaga.
+          Todas las fechas y todos los montos, antes de decidir. Es la
+          información que convierte "en cuotas" en un compromiso concreto en
+          vez de una promesa vaga.
         */}
         {enCuotas && (
-          <div className="mt-3 animate-rise rounded-2xl border-[3px] border-tinta bg-nube px-4 py-4">
-            <p className="font-mono text-[0.64rem] font-bold uppercase tracking-[0.14em] text-tinta/75">
-              Tu plan de pago
-            </p>
-            <ol className="mt-3 flex flex-col gap-2">
-              {plan.map((cuota) => (
-                <li
-                  key={cuota.numero}
-                  className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b-2 border-dashed border-tinta/15 pb-2 last:border-0 last:pb-0"
-                >
-                  <span className="font-display text-[0.95rem] font-extrabold text-tinta">
-                    Cuota {cuota.numero} de {MAX_ABONOS}
-                  </span>
-                  <span className="text-[0.86rem] text-tinta/75">
-                    {cuota.numero === 1
-                      ? "Hoy, para reservar el cupo"
-                      : `Vence el ${fechaLarga(cuota.vence)}`}
-                  </span>
-                  <span className="raya-mono ml-auto text-[1rem] font-bold text-tinta">
-                    {pesos(cuota.monto)}
-                  </span>
-                </li>
-              ))}
-            </ol>
+          <div className="mt-3 animate-rise">
+            <TablaDelPlan plan={plan} titulo="Tu plan de pago" />
             <p className="mt-3 text-[0.84rem] leading-snug text-tinta/75">
               Los montos son fijos y cada cuota se sube con su propio
-              comprobante. Si el {fechaLarga(segunda.vence)} pasa con saldo, la
+              comprobante. Si el {fechaLarga(ultima.vence)} pasa con saldo, la
               inscripción queda vencida.
             </p>
           </div>
         )}
 
-        {!dosCuotas && (
+        {faltanPlanes && (
           <p className="mt-3 rounded-2xl border-[3px] border-tinta bg-marea px-4 py-3 text-[0.86rem] leading-snug text-tinta">
-            <strong>El plan de dos cuotas ya no está disponible.</strong> La
-            segunda cuota tendría que estar pagada y verificada antes del{" "}
-            {fechaLarga(fechaLimite)}, y a estas alturas no queda plazo para
-            repartir el pago. Esta inscripción se paga de una.
+            <strong>
+              {planes.length === 1
+                ? "Los planes de cuotas ya no están disponibles."
+                : `El plan de ${MAX_CUOTAS} cuotas ya no está disponible.`}
+            </strong>{" "}
+            Cada cuota va {DIAS_ENTRE_CUOTAS} días después de la anterior y la
+            última tiene que estar pagada y verificada antes del{" "}
+            {fechaLarga(fechaLimite)}. A estas alturas ya no cabe
+            {planes.length === 1
+              ? ": esta inscripción se paga de una."
+              : `: solo quedan los planes de ${planes
+                  .map((p) => p.cuotas)
+                  .join(" y ")} cuotas.`}
           </p>
         )}
       </fieldset>
@@ -246,7 +233,9 @@ export function PasoPago({
             1. Transfiere a una de estas cuentas
           </h2>
           <span className="raya-mono text-[0.66rem] font-bold uppercase tracking-[0.12em] text-tinta/75">
-            {enCuotas ? `${pesos(aTransferir)} · cuota 1` : pesos(aTransferir)}
+            {enCuotas
+              ? `${pesos(aTransferir)} · cuota 1 de ${plan.length}`
+              : pesos(aTransferir)}
           </span>
         </div>
         <p className="mt-2 text-[0.92rem] leading-relaxed text-tinta/75">
@@ -278,60 +267,12 @@ export function PasoPago({
           montoSugerido={aTransferir}
           notaMonto={
             enCuotas
-              ? `La primera cuota son ${pesos(aTransferir)} exactos.`
+              ? `La primera de tus ${plan.length} cuotas son ${pesos(aTransferir)} exactos.`
               : `El pago total son ${pesos(aTransferir)} exactos.`
           }
           onRegistrado={setExito}
         />
       </Tarjeta>
     </div>
-  );
-}
-
-/* Sirve tal cual venía del pago con pasarela: dos opciones, una elegida. */
-function OpcionPlan({
-  activa,
-  onElegir,
-  titulo,
-  monto,
-  detalle,
-  tono,
-}: {
-  activa: boolean;
-  onElegir: () => void;
-  titulo: string;
-  monto: string;
-  detalle: string;
-  tono: "turquesa" | "sol";
-}) {
-  return (
-    <label
-      className={`pulsable flex cursor-pointer flex-col gap-2 rounded-2xl border-[3px] border-tinta p-5 shadow-[5px_5px_0_0_var(--color-tinta)] transition-colors ${
-        activa ? (tono === "turquesa" ? "bg-turquesa" : "bg-sol") : "bg-nube"
-      }`}
-    >
-      <span className="flex items-center gap-2.5">
-        <input
-          type="radio"
-          name="plan"
-          checked={activa}
-          onChange={onElegir}
-          className="sr-only"
-        />
-        <span
-          aria-hidden
-          className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border-[3px] border-tinta ${activa ? "bg-tinta" : "bg-nube"}`}
-        >
-          {activa && <span className="h-1.5 w-1.5 rounded-full bg-turquesa" />}
-        </span>
-        <span className="font-display text-base font-extrabold text-tinta">
-          {titulo}
-        </span>
-      </span>
-      <span className="font-display text-2xl font-extrabold leading-none tracking-tight text-tinta">
-        {monto}
-      </span>
-      <span className="text-[0.84rem] leading-snug text-tinta/75">{detalle}</span>
-    </label>
   );
 }

@@ -41,8 +41,8 @@ const SITIO = new URL(
 const DESCRIPCION =
   `Maratón de montaña de ${EVENTO.etapas} etapas en ${EVENTO.lugar}, ` +
   `${EVENTO.fechaLegible}. ${CATEGORIAS.length} categorías, ` +
-  `${pesos(PRECIO_INSCRIPCION)}. Inscríbete en cinco pasos y paga de una o ` +
-  `en dos cuotas.`;
+  `${pesos(PRECIO_INSCRIPCION)}. Inscríbete en cinco pasos y paga de una, ` +
+  `en dos o en tres cuotas.`;
 
 export const metadata: Metadata = {
   metadataBase: SITIO,

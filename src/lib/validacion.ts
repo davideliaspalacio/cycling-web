@@ -118,10 +118,10 @@ export function avisoDeCategoria(
  * `src/lib/almacenamiento.ts`.
  *
  * Aquí el monto solo se comprueba como cifra: que sean pesos enteros y
- * positivos. **El mínimo real ya no es una constante** —desde el plan de dos
- * cuotas depende de si es el primer comprobante o el segundo y de cuánto se
- * verificó antes—, así que esa regla vive en `montoMinimoDeAbono`
- * (`src/lib/servicio.ts`), que es el único sitio que conoce la inscripción.
+ * positivos. **El mínimo real ya no es una constante** —depende del plan que
+ * eligió la inscripción, de en qué cuota va y de cuánto se verificó antes—,
+ * así que esa regla vive en `montoMinimoDeAbono` (`src/lib/servicio.ts`), que
+ * es el único sitio que conoce la inscripción.
  */
 export const esquemaAbono = z.object({
   referencia: texto(4, 40, "la referencia de tu inscripción").toUpperCase(),

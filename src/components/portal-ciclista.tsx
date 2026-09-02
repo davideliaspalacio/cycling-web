@@ -8,9 +8,14 @@ import {
   type AbonoRegistrado,
 } from "@/components/formulario/caja-evidencia";
 import { CuentasRecaudo } from "@/components/formulario/cuentas-recaudo";
+import {
+  OpcionesDePlan,
+  TablaDelPlan,
+  type PlanOfrecido,
+} from "@/components/formulario/planes-de-pago";
 import { Boton, Campo, Chip, Tarjeta } from "@/components/ui";
 import type { CuentaRecaudo } from "@/lib/catalogo";
-import { MAX_ABONOS, recorridoDe } from "@/lib/catalogo";
+import { DIAS_ENTRE_CUOTAS, MAX_CUOTAS, recorridoDe } from "@/lib/catalogo";
 import type { CuotaDelPlan } from "@/lib/dinero";
 import { fechaLarga, pesos } from "@/lib/dinero";
 import type { CanalPago, EstadoAbono, EstadoInscripcion } from "@/lib/tipos";
@@ -54,12 +59,17 @@ export type ResumenPago = {
   abonosDisponibles: number;
   cerrado: boolean;
   fechaLimite: string;
-  /** Los dos montos con sus dos fechas. Se enseñan desde el día uno. */
+  /**
+   * En cuántas cuotas quedó la inscripción, o `null` si todavía no ha subido
+   * ningún comprobante: el plan lo fija el primero.
+   */
+  cuotas: number | null;
+  /** Todos los montos con todas sus fechas del plan elegido. Vacío si no hay. */
   plan: CuotaDelPlan[];
-  /** Si esta inscripción va por el plan de dos cuotas. */
-  dosCuotas: boolean;
-  /** Vencimiento comprometido de la segunda cuota, si queda alguna. */
-  venceSegundaCuota: string | null;
+  /** Los planes que todavía puede elegir. Solo trae algo si no hay plan aún. */
+  opciones: PlanOfrecido[];
+  /** Vencimiento comprometido de la próxima cuota, si queda alguna. */
+  venceProximaCuota: string | null;
   /** Lo que tiene que cubrir el próximo comprobante. Ya no es monto libre. */
   montoMinimo: number;
 };
@@ -226,6 +236,9 @@ function Inscripcion({
   const router = useRouter();
   const [abriendo, setAbriendo] = useState(false);
   const [recienSubido, setRecienSubido] = useState<AbonoRegistrado | null>(null);
+  // Solo se usa mientras el plan esté sin elegir: quien llega aquí sin haber
+  // subido nada todavía puede escoger, igual que en el formulario.
+  const [cuotasElegidas, setCuotasElegidas] = useState(1);
 
   const { pago } = vista;
   const pagado = pago.verificado;
@@ -234,9 +247,24 @@ function Inscripcion({
   const estado = ETIQUETA_ESTADO[vista.estado];
   const completa = pago.saldo === 0;
   const puedeAbonar = !completa && !pago.cerrado && pago.abonosDisponibles > 0;
-  // El segundo comprobante es distinto del primero: cierra la inscripción y
-  // tiene fecha comprometida, así que el texto de la acción cambia.
-  const esSegundaCuota = contarQueCuentan(pago.abonos) > 0;
+
+  // El plan lo fija el primer comprobante. Mientras no haya ninguno, el
+  // ciclista elige aquí y el monto a transferir sale de esa elección; después,
+  // el plan manda y el monto es el mínimo que calculó el servidor.
+  const sinPlan = pago.opciones.length > 0;
+  const opcion =
+    pago.opciones.find((o) => o.cuotas === cuotasElegidas) ?? pago.opciones[0];
+  const planVisible = sinPlan ? (opcion?.cuotasDelPlan ?? []) : pago.plan;
+  const aTransferir = sinPlan
+    ? (opcion?.cuotasDelPlan[0]?.monto ?? pago.montoMinimo)
+    : pago.montoMinimo;
+  // Cada cuota es distinta de la anterior: la última cierra la inscripción y
+  // las intermedias tienen fecha comprometida, así que el texto de la acción
+  // cambia con el número.
+  const hechos = contarQueCuentan(pago.abonos);
+  const numeroDeCuota = hechos + 1;
+  const totalCuotas = pago.cuotas ?? planVisible.length;
+  const enCuotas = totalCuotas > 1;
 
   function alRegistrar(abono: AbonoRegistrado) {
     setRecienSubido(abono);
@@ -332,55 +360,71 @@ function Inscripcion({
           </div>
           <div>
             <dt className="raya-mono text-[0.62rem] uppercase tracking-[0.12em] text-tinta/75">
-              {pago.venceSegundaCuota ? "Segunda cuota vence" : "Comprobantes"}
+              {pago.venceProximaCuota
+                ? `Cuota ${numeroDeCuota} de ${totalCuotas} vence`
+                : "Comprobantes"}
             </dt>
             <dd className="mt-0.5 font-display text-[1.05rem] font-extrabold text-tinta">
-              {pago.venceSegundaCuota
-                ? fechaLarga(pago.venceSegundaCuota)
-                : `${contarQueCuentan(pago.abonos)} de ${MAX_ABONOS}`}
+              {pago.venceProximaCuota
+                ? fechaLarga(pago.venceProximaCuota)
+                : `${hechos} de ${totalCuotas}`}
             </dd>
           </div>
         </dl>
 
         {/*
-          Los dos montos y las dos fechas, siempre a la vista. Es lo que el
+          Todos los montos y todas las fechas, siempre a la vista. Es lo que el
           ciclista aceptó al inscribirse y lo que decide si pierde el cupo.
         */}
-        {pago.dosCuotas && !completa && (
-          <div className="mt-5 rounded-2xl border-[3px] border-tinta bg-marea px-4 py-4">
-            <p className="font-mono text-[0.62rem] font-bold uppercase tracking-[0.14em] text-tinta/75">
-              Tu plan: {MAX_ABONOS} cuotas
+        {!sinPlan && enCuotas && !completa && (
+          <div className="mt-5">
+            <TablaDelPlan
+              plan={pago.plan}
+              titulo={`Tu plan: ${totalCuotas} cuotas`}
+              verificado={pago.verificado}
+              tono="marea"
+            />
+          </div>
+        )}
+
+        {/*
+          Sin comprobantes todavía no hay plan: el primero es el que lo fija, y
+          el monto que se transfiere es la elección. Se ofrecen solo los planes
+          que caben antes del cierre, y si falta alguno se dice por qué.
+        */}
+        {sinPlan && !completa && !pago.cerrado && (
+          <div className="mt-6">
+            <p className="mb-3 font-display text-[1.05rem] font-extrabold tracking-tight text-tinta">
+              ¿Cómo quieres pagar?
             </p>
-            <ol className="mt-3 flex flex-col gap-2">
-              {pago.plan.map((cuota) => {
-                // Una cuota se da por cubierta cuando lo verificado alcanza la
-                // suma de esta cuota y las anteriores.
-                const acumulado = pago.plan
-                  .slice(0, cuota.numero)
-                  .reduce((s, c) => s + c.monto, 0);
-                const cubierta = pago.verificado >= acumulado;
-                return (
-                  <li
-                    key={cuota.numero}
-                    className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b-2 border-dashed border-tinta/20 pb-2 last:border-0 last:pb-0"
-                  >
-                    <span className="font-display text-[0.92rem] font-extrabold text-tinta">
-                      Cuota {cuota.numero} de {MAX_ABONOS}
-                    </span>
-                    <span className="text-[0.84rem] text-tinta/75">
-                      {cubierta
-                        ? "Pagada y verificada"
-                        : cuota.numero === 1
-                          ? "Pendiente"
-                          : `Vence el ${fechaLarga(cuota.vence)}`}
-                    </span>
-                    <span className="raya-mono ml-auto text-[0.95rem] font-bold text-tinta">
-                      {pesos(cuota.monto)}
-                    </span>
-                  </li>
-                );
-              })}
-            </ol>
+            <OpcionesDePlan
+              opciones={pago.opciones}
+              elegido={opcion?.cuotas ?? 1}
+              onElegir={setCuotasElegidas}
+              total={vista.total}
+            />
+            {planVisible.length > 1 && (
+              <div className="mt-3">
+                <TablaDelPlan
+                  plan={planVisible}
+                  titulo="Tu plan de pago"
+                  tono="marea"
+                />
+              </div>
+            )}
+            {pago.opciones.length < MAX_CUOTAS && (
+              <p className="mt-3 rounded-2xl border-[3px] border-tinta bg-marea px-4 py-3 text-[0.86rem] leading-snug text-tinta">
+                <strong>
+                  {pago.opciones.length === 1
+                    ? "Los planes de cuotas ya no están disponibles."
+                    : `El plan de ${MAX_CUOTAS} cuotas ya no está disponible.`}
+                </strong>{" "}
+                Cada cuota va {DIAS_ENTRE_CUOTAS} días después de la anterior y
+                la última tiene que estar pagada y verificada antes del{" "}
+                {fechaLarga(pago.fechaLimite)}, y desde tu fecha de inscripción
+                ya no cabe.
+              </p>
+            )}
           </div>
         )}
 
@@ -415,21 +459,21 @@ function Inscripcion({
           // mandarlo a escribir un correo que no hace falta.
           <p className="mt-5 rounded-2xl border-[3px] border-tinta bg-sol px-4 py-3 text-[0.9rem] font-semibold leading-snug text-tinta">
             {pago.enRevision > 0
-              ? `Subiste los ${MAX_ABONOS} comprobantes de tu plan y estamos revisando el último. No tienes que hacer nada: te avisamos por correo en cuanto quede verificado.`
-              : `Ya subiste los ${MAX_ABONOS} comprobantes de tu plan y aún queda saldo. Escríbenos para terminar de pagar.`}
+              ? `Subiste los ${totalCuotas} comprobantes de tu plan y estamos revisando el último. No tienes que hacer nada: te avisamos por correo en cuanto quede verificado.`
+              : `Ya subiste los ${totalCuotas} comprobantes de tu plan y aún queda saldo. Escríbenos para terminar de pagar.`}
           </p>
         ) : (
           !abriendo && (
             <div className="mt-6 flex flex-wrap items-center gap-4">
               <Boton tamano="lg" onClick={() => setAbriendo(true)}>
-                {esSegundaCuota
-                  ? "Pagar la segunda cuota"
+                {numeroDeCuota > 1
+                  ? `Pagar la cuota ${numeroDeCuota} de ${totalCuotas}`
                   : "Subir mi comprobante"}
               </Boton>
               <p className="text-[0.82rem] leading-snug text-tinta/75">
-                {esSegundaCuota
-                  ? `${pesos(pago.montoMinimo)}, hasta el ${fechaLarga(pago.venceSegundaCuota ?? pago.fechaLimite)}`
-                  : `${pesos(pago.montoMinimo)} como mínimo · hasta el ${fechaLarga(pago.fechaLimite)}`}
+                {numeroDeCuota > 1
+                  ? `${pesos(aTransferir)}, hasta el ${fechaLarga(pago.venceProximaCuota ?? pago.fechaLimite)}`
+                  : `${pesos(aTransferir)} como mínimo · hasta el ${fechaLarga(pago.fechaLimite)}`}
               </p>
             </div>
           )
@@ -441,9 +485,9 @@ function Inscripcion({
         <Tarjeta tono="nube" className="mt-5 animate-rise p-6 sm:p-8">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <h2 className="font-display text-lg font-extrabold tracking-tight text-tinta">
-              {esSegundaCuota
-                ? `Segunda cuota · ${pesos(pago.montoMinimo)}`
-                : `Subir comprobante · ${pesos(pago.montoMinimo)}`}
+              {numeroDeCuota > 1
+                ? `Cuota ${numeroDeCuota} de ${totalCuotas} · ${pesos(aTransferir)}`
+                : `Subir comprobante · ${pesos(aTransferir)}`}
             </h2>
             <button
               type="button"
@@ -455,7 +499,7 @@ function Inscripcion({
           </div>
 
           <p className="mt-2 text-[0.92rem] leading-relaxed text-tinta/75">
-            Transfiere <strong className="text-tinta">{pesos(pago.montoMinimo)}</strong>{" "}
+            Transfiere <strong className="text-tinta">{pesos(aTransferir)}</strong>{" "}
             a una de estas cuentas y súbenos el comprobante. El monto es fijo:
             no podemos recibirlo por menos. Copia el número de cuenta —
             transcribirlo a mano es como se pierde una transferencia.
@@ -471,11 +515,13 @@ function Inscripcion({
             <CajaEvidencia
               referencia={vista.referencia}
               cuentas={cuentas}
-              montoSugerido={pago.montoMinimo}
+              montoSugerido={aTransferir}
               notaMonto={
-                esSegundaCuota
-                  ? `La segunda cuota son ${pesos(pago.montoMinimo)}: cierra tu inscripción.`
-                  : `Este comprobante tiene que cubrir ${pesos(pago.montoMinimo)}.`
+                numeroDeCuota >= totalCuotas && numeroDeCuota > 1
+                  ? `La cuota ${numeroDeCuota} es la última: son ${pesos(aTransferir)} y cierra tu inscripción.`
+                  : numeroDeCuota > 1
+                    ? `La cuota ${numeroDeCuota} de ${totalCuotas} son ${pesos(aTransferir)}.`
+                    : `Este comprobante tiene que cubrir ${pesos(aTransferir)}.`
               }
               onRegistrado={alRegistrar}
             />
@@ -503,6 +549,7 @@ function Inscripcion({
                 <FilaAbono
                   abono={abono}
                   cuentas={cuentas}
+                  cuotas={totalCuotas}
                   onVolverASubir={puedeAbonar ? () => setAbriendo(true) : undefined}
                 />
               </li>
@@ -528,10 +575,13 @@ function contarQueCuentan(abonos: AbonoVisible[]): number {
 function FilaAbono({
   abono,
   cuentas,
+  cuotas,
   onVolverASubir,
 }: {
   abono: AbonoVisible;
   cuentas: CuentaRecaudo[];
+  /** Cuántas cuotas tiene el plan de esta inscripción. */
+  cuotas: number;
   onVolverASubir?: () => void;
 }) {
   const marca = ETIQUETA_ABONO[abono.estado];
@@ -603,7 +653,7 @@ function FilaAbono({
           </p>
           <p className="mt-2 text-[0.82rem] leading-snug text-nube/85">
             Tu cupo sigue reservado y este intento no gastó ninguno de tus{" "}
-            {MAX_ABONOS} comprobantes.
+            {cuotas} comprobantes.
           </p>
           {onVolverASubir && (
             <Boton

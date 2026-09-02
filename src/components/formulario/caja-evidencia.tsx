@@ -188,7 +188,7 @@ export function CajaEvidencia({
   cuentas: CuentaRecaudo[];
   /**
    * Lo que toca transferir en este comprobante — la cuota o el total. Se ofrece
-   * como valor de arranque. Con el plan de dos cuotas ya no es "sugerido" en el
+   * como valor de arranque. Con los planes de cuotas ya no es "sugerido" en el
    * sentido viejo: el servidor rechaza un comprobante por debajo de esta cifra.
    */
   montoSugerido?: number;

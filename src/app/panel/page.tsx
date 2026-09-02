@@ -39,7 +39,11 @@ const PLAN: Record<PlanPago, string> = {
   CONTADO: "Contado (tarjeta · histórico)",
   CUOTAS: "Cuotas (tarjeta · histórico)",
   TOTAL: "Pago total",
+  // `ABONOS` a secas es el valor histórico de cuando el único plan diferido
+  // eran dos cuotas; sigue queriendo decir eso.
   ABONOS: "Dos cuotas",
+  ABONOS_2: "Dos cuotas",
+  ABONOS_3: "Tres cuotas",
 };
 
 export default async function Panel() {

@@ -10,15 +10,22 @@ import {
   EVENTO,
   FECHA_LIMITE_ABONOS,
   GRUPOS,
-  MAX_ABONOS,
+  MAX_CUOTAS,
+  PLANES_DE_CUOTAS,
   PRECIO_INSCRIPCION,
   categoriasDeGrupo,
   recorridoDe,
 } from "@/lib/catalogo";
 import { fechaLarga, montosDelPlan, pesos } from "@/lib/dinero";
 
-/** Los dos montos del plan. Iguales por construcción: 380.000 → 190.000 × 2. */
-const CUOTA = montosDelPlan(PRECIO_INSCRIPCION)[0];
+/**
+ * Los planes diferidos con su primera cuota, para el cartel de precios. El de
+ * una cuota es el pago total y va aparte, en su propia tarjeta.
+ */
+const PLANES = PLANES_DE_CUOTAS.filter((n) => n > 1).map((cuotas) => ({
+  cuotas,
+  montos: montosDelPlan(PRECIO_INSCRIPCION, cuotas),
+}));
 
 const CINTA = [
   EVENTO.tipo.toUpperCase(),
@@ -26,7 +33,7 @@ const CINTA = [
   EVENTO.lema,
   EVENTO.lugar.toUpperCase(),
   `${CATEGORIAS.length} CATEGORÍAS`,
-  `${MAX_ABONOS} CUOTAS SIN RECARGO`,
+  `HASTA ${MAX_CUOTAS} CUOTAS SIN RECARGO`,
 ];
 
 
@@ -65,7 +72,8 @@ export default function Inicio() {
             <p className="mt-6 max-w-xl text-lg leading-relaxed text-tinta/75">
               {EVENTO.etapas} etapas de XCM entre los caminos reales, la piedra y el
               calor de {EVENTO.lugar}. Inscribirse debería costar mucho menos
-              esfuerzo que eso: cinco pasos, y pagas de una o en dos cuotas.
+              esfuerzo que eso: cinco pasos, y pagas de una, en dos o en tres
+              cuotas.
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -183,10 +191,11 @@ export default function Inicio() {
             titulo={`${CATEGORIAS.length} categorías, un solo precio.`}
             bajada={
               <>
-                {pesos(PRECIO_INSCRIPCION)} para todas: de una, o en{" "}
-                {MAX_ABONOS} cuotas de {pesos(CUOTA)}. La organización verifica
-                que tu edad coincida con la categoría antes de confirmar el
-                cupo.
+                {pesos(PRECIO_INSCRIPCION)} para todas: de una, o repartidos
+                hasta en {MAX_CUOTAS} cuotas desde{" "}
+                {pesos(PLANES[PLANES.length - 1].montos[0])}. La organización
+                verifica que tu edad coincida con la categoría antes de
+                confirmar el cupo.
               </>
             }
           />
@@ -249,7 +258,7 @@ export default function Inicio() {
         >
           <TituloSeccion
             eyebrow="Cómo se paga"
-            titulo={`De una, o en ${MAX_ABONOS} cuotas.`}
+            titulo={`De una, o hasta en ${MAX_CUOTAS} cuotas.`}
             bajada={`Transferencia a ${destinos}. Subes el comprobante y la organización lo verifica contra el extracto. Sin tarjeta, sin recargo y sin cobros automáticos: nadie te toca la cuenta, cada cuota la transfieres tú.`}
           />
 
@@ -281,44 +290,48 @@ export default function Inicio() {
             </Tarjeta>
 
             <Tarjeta tono="sol" className="flex flex-col gap-4 p-7">
-              <Chip tono="nube">{MAX_ABONOS} cuotas</Chip>
+              <Chip tono="nube">2 o {MAX_CUOTAS} cuotas</Chip>
               <p className="font-display text-[2.6rem] font-extrabold leading-none tracking-tight">
-                {pesos(CUOTA)} × {MAX_ABONOS}
+                Desde {pesos(PLANES[PLANES.length - 1].montos[0])}
               </p>
               <p className="text-[0.95rem] leading-relaxed text-tinta/75">
                 Reservas el cupo con la primera cuota y tienes{" "}
                 <strong className="text-tinta">
                   {DIAS_ENTRE_CUOTAS} días de plazo
                 </strong>{" "}
-                para la segunda. Suman {pesos(PRECIO_INSCRIPCION)} exactos — sin
-                un peso de recargo.
+                entre una cuota y la siguiente. Sumen las que sumen, son{" "}
+                {pesos(PRECIO_INSCRIPCION)} exactos — sin un peso de recargo.
               </p>
 
               <ol className="mt-1 flex flex-col gap-1.5">
-                {[
-                  `Cuota 1: ${pesos(CUOTA)} al inscribirte`,
-                  `Cuota 2: ${pesos(CUOTA)} a los ${DIAS_ENTRE_CUOTAS} días`,
-                  "Cada una con su comprobante, que verificamos a mano",
-                ].map((paso, i) => (
+                {PLANES.map(({ cuotas, montos }) => (
                   <li
-                    key={paso}
+                    key={cuotas}
                     className="flex items-center gap-3 rounded-xl border-[2.5px] border-tinta bg-nube/80 px-3 py-2"
                   >
                     <span className="raya-mono text-[0.7rem] font-bold text-tinta/75">
-                      0{i + 1}
+                      0{cuotas}
                     </span>
                     <span className="text-[0.84rem] font-medium text-tinta/75">
-                      {paso}
+                      {cuotas} cuotas de {montos.map((m) => pesos(m)).join(" · ")}
                     </span>
                   </li>
                 ))}
+                <li className="flex items-center gap-3 rounded-xl border-[2.5px] border-tinta bg-nube/80 px-3 py-2">
+                  <span className="raya-mono text-[0.7rem] font-bold text-tinta/75">
+                    ✓
+                  </span>
+                  <span className="text-[0.84rem] font-medium text-tinta/75">
+                    Cada una con su comprobante, que verificamos a mano
+                  </span>
+                </li>
               </ol>
 
               <p className="text-[0.84rem] leading-snug text-tinta/75">
-                Las dos fechas se te enseñan al inscribirte, antes de decidir. Si
-                te inscribes tan cerca del cierre que los {DIAS_ENTRE_CUOTAS}{" "}
-                días ya no caben, el plan no se ofrece y la inscripción se paga
-                de una.
+                Todas las fechas se te enseñan al inscribirte, antes de decidir.
+                Si te inscribes tan cerca del cierre que los{" "}
+                {DIAS_ENTRE_CUOTAS} días de la última ya no caben, ese plan no se
+                ofrece: te decimos por qué y quedan los que sí quepan.
               </p>
 
               <p className="raya-mono text-[0.72rem] font-bold uppercase tracking-[0.1em] text-tinta/75">
@@ -341,7 +354,7 @@ export default function Inicio() {
                 Siempre sabes cuánto te falta.
               </h3>
               <p className="mt-2 max-w-2xl text-[0.92rem] leading-relaxed text-tinta/75">
-                Tu página de inscripción muestra las dos cuotas con sus dos
+                Tu página de inscripción muestra todas tus cuotas con sus
                 fechas y el estado de cada comprobante —enviado, en revisión,
                 verificado o rechazado—. Si rechazamos uno te decimos por qué y
                 puedes volver a subirlo: no gasta cuota y el cupo no se pierde.

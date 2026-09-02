@@ -15,7 +15,7 @@ import {
   categoriaPorCodigo,
   recorridoDe,
 } from "@/lib/catalogo";
-import { fechaLarga, pesos, saldoPendiente } from "@/lib/dinero";
+import { fechaLarga, fechaSegundaCuota, pesos, saldoPendiente } from "@/lib/dinero";
 import { resumenDePago } from "@/lib/servicio";
 import type { Inscripcion } from "@/lib/tipos";
 
@@ -217,10 +217,22 @@ function Constancia({
 }) {
   const abonado = ins.total - saldo;
   const pct = Math.min(100, Math.round((abonado / ins.total) * 100));
+  // La constancia también lleva la fecha comprometida: es el papel que el
+  // ciclista imprime o guarda, y si solo dijera el cierre general se le pasaría
+  // el vencimiento de su segunda cuota.
+  const venceSegunda =
+    ins.medioPago === "TRANSFERENCIA" && ins.plan === "ABONOS"
+      ? fechaSegundaCuota(ins.creadaEn)
+      : null;
 
   const datos: [string, string][] = [
     ["Categoría", categoria],
     ...(recorrido ? ([["Recorrido", recorrido]] as [string, string][]) : []),
+    ...(venceSegunda
+      ? ([
+          [`Cuota ${MAX_ABONOS} de ${MAX_ABONOS}`, fechaLarga(venceSegunda)],
+        ] as [string, string][])
+      : []),
     ["Sangre", ins.ciclista.rh],
     ...PRENDAS.map((p) => [p.nombre, ins.tallas[p.campo]] as [string, string]),
   ];
@@ -323,9 +335,25 @@ function Constancia({
               Cómo terminar de pagar
             </h2>
             <p className="mt-2 text-[0.9rem] leading-relaxed text-tinta/75">
-              Transfiere a una de estas cuentas — en hasta {MAX_ABONOS} abonos —
-              y sube el comprobante desde tu página de inscripción. El último día
-              para subir comprobantes es el {fechaLarga(FECHA_LIMITE_ABONOS)}.
+              {venceSegunda ? (
+                <>
+                  Te falta la segunda y última cuota:{" "}
+                  <strong className="text-tinta">{pesos(saldo)}</strong>, con
+                  plazo hasta el{" "}
+                  <strong className="text-tinta">
+                    {fechaLarga(venceSegunda)}
+                  </strong>
+                  . Transfiere a una de estas cuentas y sube el comprobante desde
+                  tu página de inscripción.
+                </>
+              ) : (
+                <>
+                  Transfiere <strong className="text-tinta">{pesos(saldo)}</strong>{" "}
+                  a una de estas cuentas y sube el comprobante desde tu página de
+                  inscripción. El último día para subir comprobantes es el{" "}
+                  {fechaLarga(FECHA_LIMITE_ABONOS)}.
+                </>
+              )}
             </p>
 
             <CuentasRecaudo
@@ -345,7 +373,7 @@ function Constancia({
 
         <p className="mt-5 text-[0.82rem] leading-relaxed text-tinta/75 print:hidden">
           Esta constancia acredita tu cupo, no tu pago completo. El ticket con
-          dorsal aparece aquí mismo apenas verifiquemos el último abono.
+          dorsal aparece aquí mismo apenas verifiquemos la última cuota.
         </p>
       </main>
     </>

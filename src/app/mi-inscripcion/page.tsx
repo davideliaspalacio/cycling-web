@@ -78,6 +78,10 @@ async function vistaDe(ins: Inscripcion): Promise<VistaPortal> {
       abonosDisponibles: resumen.abonosDisponibles,
       cerrado: resumen.cerrado,
       fechaLimite: FECHA_LIMITE_ABONOS,
+      plan: resumen.plan,
+      dosCuotas: resumen.dosCuotas,
+      venceSegundaCuota: resumen.venceSegundaCuota,
+      montoMinimo: resumen.montoMinimo,
     },
   };
 }

@@ -44,17 +44,36 @@ export const DIA_DE_COBRO = 5;
 /* ------------------------- Pago manual por transferencia ------------------- */
 
 /**
- * DECISIÓN PENDIENTE DE CONFIRMAR — ver docs/decisiones-pago-manual.md §1.
- * Cuántos abonos puede hacer un ciclista que no paga de una.
+ * Cuántos comprobantes admite el plan diferido — ver
+ * docs/decisiones-pago-manual.md §1.
+ *
+ * Son exactamente dos porque el plan son dos cuotas iguales, no una bolsa de
+ * abonos libres: el número de comprobantes y el número de cuotas son la misma
+ * cosa. Cambiarlo aquí cambia el reparto (`montosDelPlan`) y todos los textos.
  */
-export const MAX_ABONOS = 3;
+export const MAX_ABONOS = 2;
 
 /**
- * DECISIÓN PENDIENTE DE CONFIRMAR — ver docs/decisiones-pago-manual.md §2.
- * Sin anticipo obligatorio: cualquier monto vale. Subirlo aquí lo exige en
- * todo el flujo sin tocar nada más.
+ * Días de plazo entre la primera cuota y la segunda — ver
+ * docs/decisiones-pago-manual.md §2.
+ *
+ * Se cuentan desde la fecha de inscripción, no desde que la organización
+ * verifica el primer comprobante: el ciclista no controla cuándo revisamos, y
+ * anclarlo a la revisión le movería la fecha bajo los pies.
  */
-export const ABONO_MINIMO = 0;
+export const DIAS_ENTRE_CUOTAS = 45;
+
+/**
+ * Margen mínimo, en días, que tiene que quedar hasta `FECHA_LIMITE_ABONOS`
+ * para poder ofrecer el plan de dos cuotas.
+ *
+ * Por qué existe: la segunda cuota se acota contra el cierre, así que quien se
+ * inscriba muy tarde vería "dos cuotas" con las dos fechas casi pegadas. Con
+ * menos de dos semanas de separación el plan deja de ser un plazo y pasa a ser
+ * una trampa —hay que transferir, y además nos tiene que dar tiempo de
+ * revisarlo antes del cierre—, así que en ese caso solo se ofrece pago total.
+ */
+export const MARGEN_MINIMO_DOS_CUOTAS = 15;
 
 /**
  * DECISIÓN PENDIENTE DE CONFIRMAR — ver docs/decisiones-pago-manual.md §4.

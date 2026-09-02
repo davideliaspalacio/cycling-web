@@ -36,7 +36,7 @@ const PLAN: Record<PlanPago, string> = {
   CONTADO: "Contado (tarjeta · histórico)",
   CUOTAS: "Cuotas (tarjeta · histórico)",
   TOTAL: "Pago total",
-  ABONOS: "Por abonos",
+  ABONOS: "Dos cuotas",
 };
 
 export default async function Panel() {
@@ -49,7 +49,7 @@ export default async function Panel() {
   const recaudado = inscripciones.reduce((s, i) => s + i.pagado, 0);
   // El saldo sale de `total − pagado` y no de la tabla de cuotas: bajo pago
   // manual las cuotas son un plan sugerido, no el libro de dinero, y una
-  // inscripción por abonos ni siquiera tiene filas de cuota
+  // inscripción por transferencia ni siquiera tiene filas de cuota
   // (docs/decisiones-pago-manual.md §1).
   const porCobrar = inscripciones.reduce(
     (s, i) => s + Math.max(0, i.total - i.pagado),

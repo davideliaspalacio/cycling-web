@@ -179,14 +179,21 @@ export function CajaEvidencia({
   referencia,
   cuentas,
   montoSugerido,
+  notaMonto,
   canalInicial,
   onRegistrado,
 }: {
   referencia: string;
   /** Llegan del servidor: definen los destinos válidos del selector. */
   cuentas: CuentaRecaudo[];
-  /** Lo que falta por pagar; se ofrece como valor de arranque. */
+  /**
+   * Lo que toca transferir en este comprobante — la cuota o el total. Se ofrece
+   * como valor de arranque. Con el plan de dos cuotas ya no es "sugerido" en el
+   * sentido viejo: el servidor rechaza un comprobante por debajo de esta cifra.
+   */
   montoSugerido?: number;
+  /** Qué es ese monto, dicho con palabras. Reemplaza la ayuda por defecto. */
+  notaMonto?: string;
   canalInicial?: string;
   onRegistrado: (abono: AbonoRegistrado) => void;
 }) {
@@ -514,9 +521,10 @@ export function CajaEvidencia({
           ayuda={
             sobra
               ? undefined
-              : montoSugerido
-                ? `Te falta ${pesos(montoSugerido)}. Puedes abonar menos.`
-                : "En pesos, sin centavos."
+              : (notaMonto ??
+                (montoSugerido
+                  ? `Tiene que cubrir ${pesos(montoSugerido)}.`
+                  : "En pesos, sin centavos."))
           }
         >
           <div className="relative">
@@ -583,8 +591,23 @@ export function CajaEvidencia({
 
       {sobra && (
         <p className="rounded-2xl border-[3px] border-tinta bg-sol px-4 py-3 text-[0.86rem] font-semibold leading-snug text-tinta">
-          Estás declarando más de lo que te falta ({pesos(montoSugerido!)}). Si
+          Estás declarando más de lo que te toca ({pesos(montoSugerido!)}). Si
           transferiste de más, súbelo igual y lo revisamos contigo.
+        </p>
+      )}
+
+      {/*
+        Aviso antes de subir, no después: el monto de cada cuota es fijo y el
+        servidor rechaza el comprobante que se quede corto. Enterarse tras
+        esperar la subida de una foto de 3 MB es la peor manera de saberlo.
+      */}
+      {montoSugerido !== undefined && enPesos > 0 && enPesos < montoSugerido && (
+        <p
+          role="alert"
+          className="rounded-2xl border-[3px] border-tinta bg-alerta px-4 py-3 text-[0.86rem] font-semibold leading-snug text-nube"
+        >
+          Este comprobante tiene que ser por {pesos(montoSugerido)} como mínimo.
+          Los montos del plan son fijos: no podemos recibirlo por menos.
         </p>
       )}
 

@@ -6,6 +6,7 @@ import { BotonEnlace, Chip, Tarjeta, TituloSeccion } from "@/components/ui";
 import {
   CATEGORIAS,
   CUENTAS_RECAUDO,
+  DIAS_ENTRE_CUOTAS,
   EVENTO,
   FECHA_LIMITE_ABONOS,
   GRUPOS,
@@ -14,7 +15,10 @@ import {
   categoriasDeGrupo,
   recorridoDe,
 } from "@/lib/catalogo";
-import { fechaLarga, pesos } from "@/lib/dinero";
+import { fechaLarga, montosDelPlan, pesos } from "@/lib/dinero";
+
+/** Los dos montos del plan. Iguales por construcción: 380.000 → 190.000 × 2. */
+const CUOTA = montosDelPlan(PRECIO_INSCRIPCION)[0];
 
 const CINTA = [
   EVENTO.tipo.toUpperCase(),
@@ -22,7 +26,7 @@ const CINTA = [
   EVENTO.lema,
   EVENTO.lugar.toUpperCase(),
   `${CATEGORIAS.length} CATEGORÍAS`,
-  `HASTA ${MAX_ABONOS} ABONOS`,
+  `${MAX_ABONOS} CUOTAS SIN RECARGO`,
 ];
 
 
@@ -61,7 +65,7 @@ export default function Inicio() {
             <p className="mt-6 max-w-xl text-lg leading-relaxed text-tinta/75">
               {EVENTO.etapas} etapas de XCM entre los caminos reales, la piedra y el
               calor de {EVENTO.lugar}. Inscribirse debería costar mucho menos
-              esfuerzo que eso: cinco pasos, y pagas de una o en abonos.
+              esfuerzo que eso: cinco pasos, y pagas de una o en dos cuotas.
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -179,10 +183,10 @@ export default function Inicio() {
             titulo={`${CATEGORIAS.length} categorías, un solo precio.`}
             bajada={
               <>
-                {pesos(PRECIO_INSCRIPCION)} para todas, de una o en hasta{" "}
-                {MAX_ABONOS} abonos. La
-                organización verifica que tu edad coincida con la categoría antes
-                de confirmar el cupo.
+                {pesos(PRECIO_INSCRIPCION)} para todas: de una, o en{" "}
+                {MAX_ABONOS} cuotas de {pesos(CUOTA)}. La organización verifica
+                que tu edad coincida con la categoría antes de confirmar el
+                cupo.
               </>
             }
           />
@@ -245,8 +249,8 @@ export default function Inicio() {
         >
           <TituloSeccion
             eyebrow="Cómo se paga"
-            titulo="De una, o en abonos."
-            bajada={`Transferencia a ${destinos}. Subes el comprobante y la organización lo verifica contra el extracto. Sin tarjeta, sin recargo y sin cobros automáticos: nadie te toca la cuenta.`}
+            titulo={`De una, o en ${MAX_ABONOS} cuotas.`}
+            bajada={`Transferencia a ${destinos}. Subes el comprobante y la organización lo verifica contra el extracto. Sin tarjeta, sin recargo y sin cobros automáticos: nadie te toca la cuenta, cada cuota la transfieres tú.`}
           />
 
           <div className="mt-10 grid gap-5 md:grid-cols-2">
@@ -277,21 +281,24 @@ export default function Inicio() {
             </Tarjeta>
 
             <Tarjeta tono="sol" className="flex flex-col gap-4 p-7">
-              <Chip tono="nube">Hasta {MAX_ABONOS} abonos</Chip>
+              <Chip tono="nube">{MAX_ABONOS} cuotas</Chip>
               <p className="font-display text-[2.6rem] font-extrabold leading-none tracking-tight">
-                Monto libre
+                {pesos(CUOTA)} × {MAX_ABONOS}
               </p>
               <p className="text-[0.95rem] leading-relaxed text-tinta/75">
-                Reservas el cupo con el primer abono y completas cuando puedas,
-                en máximo {MAX_ABONOS} transferencias. Suman{" "}
-                {pesos(PRECIO_INSCRIPCION)} exactos — sin un peso de recargo.
+                Reservas el cupo con la primera cuota y tienes{" "}
+                <strong className="text-tinta">
+                  {DIAS_ENTRE_CUOTAS} días de plazo
+                </strong>{" "}
+                para la segunda. Suman {pesos(PRECIO_INSCRIPCION)} exactos — sin
+                un peso de recargo.
               </p>
 
               <ol className="mt-1 flex flex-col gap-1.5">
                 {[
-                  "Transfieres lo que puedas",
-                  "Subes el comprobante de ese abono",
-                  "Tu saldo baja cuando lo verificamos",
+                  `Cuota 1: ${pesos(CUOTA)} al inscribirte`,
+                  `Cuota 2: ${pesos(CUOTA)} a los ${DIAS_ENTRE_CUOTAS} días`,
+                  "Cada una con su comprobante, que verificamos a mano",
                 ].map((paso, i) => (
                   <li
                     key={paso}
@@ -307,8 +314,15 @@ export default function Inicio() {
                 ))}
               </ol>
 
+              <p className="text-[0.84rem] leading-snug text-tinta/75">
+                Las dos fechas se te enseñan al inscribirte, antes de decidir. Si
+                te inscribes tan cerca del cierre que los {DIAS_ENTRE_CUOTAS}{" "}
+                días ya no caben, el plan no se ofrece y la inscripción se paga
+                de una.
+              </p>
+
               <p className="raya-mono text-[0.72rem] font-bold uppercase tracking-[0.1em] text-tinta/75">
-                Último día para abonar: {fechaLarga(FECHA_LIMITE_ABONOS)}
+                Último día para pagar: {fechaLarga(FECHA_LIMITE_ABONOS)}
               </p>
 
               <BotonEnlace
@@ -316,7 +330,7 @@ export default function Inicio() {
                 tono="nube"
                 className="mt-auto self-start"
               >
-                Reservar con el primer abono
+                Reservar con la primera cuota
               </BotonEnlace>
             </Tarjeta>
           </div>
@@ -327,10 +341,10 @@ export default function Inicio() {
                 Siempre sabes cuánto te falta.
               </h3>
               <p className="mt-2 max-w-2xl text-[0.92rem] leading-relaxed text-tinta/75">
-                Tu página de inscripción muestra el historial de abonos con su
-                estado —enviado, en revisión, verificado o rechazado—, cuánto
-                llevas y cuánto queda. Si rechazamos un comprobante te decimos
-                por qué y puedes volver a subirlo: el cupo no se pierde.
+                Tu página de inscripción muestra las dos cuotas con sus dos
+                fechas y el estado de cada comprobante —enviado, en revisión,
+                verificado o rechazado—. Si rechazamos uno te decimos por qué y
+                puedes volver a subirlo: no gasta cuota y el cupo no se pierde.
               </p>
             </div>
             <BotonEnlace href="/mi-inscripcion" tono="turquesa" className="shrink-0">

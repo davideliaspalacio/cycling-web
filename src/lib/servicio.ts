@@ -11,7 +11,6 @@ import {
   resolverAbono,
 } from "./almacen";
 import {
-  ABONO_MINIMO,
   FECHA_LIMITE_ABONOS,
   MAX_ABONOS,
   categoriaPorCodigo,
@@ -23,8 +22,14 @@ import {
   diasHasta,
   estadoDesdeAbonos,
   excedente,
+  fechaLarga,
+  fechaSegundaCuota,
+  hayPlazoParaDosCuotas,
+  montosDelPlan,
   pesos,
+  planDeDosCuotas,
   saldoDesdeAbonos,
+  type CuotaDelPlan,
 } from "./dinero";
 import type { EntradaInscripcion } from "./validacion";
 import type {
@@ -140,18 +145,28 @@ export async function barrerRecordatorios(
 
   for (const ins of inscripciones) {
     if (ins.estado === "COMPLETA" || ins.estado === "BORRADOR") continue;
+    if (ins.pagado >= ins.total) continue;
 
-    const limite = diasHasta(FECHA_LIMITE_ABONOS, hoy);
+    // La fecha que le importa a ESTA inscripción. Con el plan de dos cuotas hay
+    // un vencimiento propio y comprometido —45 días desde que se inscribió—, y
+    // recordar contra el cierre general le llegaría semanas tarde. Quien paga
+    // de una no tiene más fecha que el cierre.
+    const dosCuotas = ins.plan === "ABONOS";
+    const vence = dosCuotas ? fechaSegundaCuota(ins.creadaEn) : FECHA_LIMITE_ABONOS;
+    const dias = diasHasta(vence, hoy);
 
-    // Pasada la fecha límite con saldo, la inscripción queda en mora. No se
-    // cancela sola: quién pierde el cupo es decisión de la organización.
-    if (limite < 0 && ins.pagado < ins.total) {
+    // Pasada su fecha con saldo, la inscripción queda en mora. No se cancela
+    // sola: quién pierde el cupo es decisión de la organización. Y seguir en
+    // mora no cierra la puerta: hasta el cierre general todavía se le admite
+    // el comprobante.
+    if (dias < 0) {
       if (ins.estado !== "EN_MORA") {
         ins.estado = "EN_MORA";
         anota(
           ins,
           "vencida",
-          `Pasó la fecha límite de abonos con ${pesos(ins.total - ins.pagado)} pendientes.`,
+          `Venció el ${fechaLarga(vence)} con ${pesos(ins.total - ins.pagado)} pendientes` +
+            (dosCuotas ? " de la segunda cuota." : "."),
         );
         await guardarInscripcion(ins);
         vencidas += 1;
@@ -159,12 +174,13 @@ export async function barrerRecordatorios(
       continue;
     }
 
-    // Aviso a 15, 7 y 3 días del cierre. Un solo correo por corrida.
-    if ([15, 7, 3].includes(limite) && ins.pagado < ins.total) {
+    // Aviso a 15, 7 y 3 días del vencimiento, y el día mismo. Un solo correo
+    // por corrida.
+    if ([15, 7, 3, 0].includes(dias)) {
       await enviarAlCiclista(
         ins,
         "recordatorio-cuota",
-        recordatorioCuota(ins, 1, limite),
+        recordatorioCuota(ins, dosCuotas ? MAX_ABONOS : 1, dias),
       );
       recordadas += 1;
     }
@@ -183,6 +199,59 @@ export async function barrerRecordatorios(
  * el diseño sale de ahí — el dinero solo cuenta cuando alguien lo verificó, y
  * cada paso deja escrito quién lo hizo y cuándo.
  */
+
+/**
+ * Cuánto tiene que declarar, como mínimo, el comprobante que se está subiendo.
+ *
+ * El plan de dos cuotas mató el "abona lo que puedas": ahora solo hay dos
+ * cifras válidas para el primer comprobante —la cuota o el total— y una sola
+ * para el segundo —lo que falte—. Se calcula sobre los abonos previos y no
+ * sobre `ins.plan` porque el plan es una etiqueta, y lo que manda es el dinero
+ * verificado.
+ *
+ * Lo que este mínimo NO toca es la revisión: el revisor sigue pudiendo aprobar
+ * por un monto distinto al declarado (docs/decisiones-pago-manual.md §6). Esto
+ * filtra lo que el ciclista escribe, no lo que la organización confirma.
+ */
+export function montoMinimoDeAbono(ins: Inscripcion, previos: Abono[]): number {
+  const saldo = saldoDesdeAbonos(ins.total, previos);
+  // Segundo comprobante: es el último que admite el plan, así que tiene que
+  // cerrar la inscripción. Aceptarlo por menos dejaría un saldo sin ninguna
+  // vía para pagarlo.
+  if (abonosQueCuentan(previos).length > 0) return saldo;
+  // Primero. Solo puede ser media inscripción si el plan de dos cuotas se le
+  // llegó a ofrecer; a quien se inscribió sobre el cierre se le prometió pago
+  // total y eso es lo que se le exige.
+  if (!hayPlazoParaDosCuotas(ins.creadaEn)) return saldo;
+  return Math.min(montosDelPlan(ins.total)[0], saldo);
+}
+
+/** El mínimo con el texto que explica de dónde sale. */
+function montoExigido(
+  ins: Inscripcion,
+  previos: Abono[],
+): { minimo: number; mensaje: string } {
+  const minimo = montoMinimoDeAbono(ins, previos);
+  const saldo = saldoDesdeAbonos(ins.total, previos);
+  const esElSegundo = abonosQueCuentan(previos).length > 0;
+
+  if (esElSegundo) {
+    return {
+      minimo,
+      mensaje: `Este es el segundo y último comprobante de tu plan: tiene que cubrir los ${pesosSimple(saldo)} que faltan.`,
+    };
+  }
+  if (minimo >= saldo) {
+    return {
+      minimo,
+      mensaje: `Tu inscripción se paga de una: el comprobante tiene que ser por ${pesosSimple(saldo)}. Ya no queda plazo para las dos cuotas antes del ${fechaLarga(FECHA_LIMITE_ABONOS)}.`,
+    };
+  }
+  return {
+    minimo,
+    mensaje: `El comprobante tiene que ser por ${pesosSimple(minimo)} (la primera de las dos cuotas) o por ${pesosSimple(ins.total)} (pago total).`,
+  };
+}
 
 export type ErrorAbono =
   | "SIN_INSCRIPCION"
@@ -241,14 +310,6 @@ export async function registrarAbono(params: {
       mensaje: "El monto debe ser un número entero de pesos mayor que cero.",
     };
   }
-  if (params.montoDeclarado < ABONO_MINIMO) {
-    return {
-      ok: false,
-      error: "MONTO_INVALIDO",
-      mensaje: `El abono mínimo es ${pesosSimple(ABONO_MINIMO)}.`,
-    };
-  }
-
   // El plazo se mide contra la fecha de hoy, no contra la del comprobante: lo
   // que se cierra es la recepción, no la transferencia.
   if (diasHasta(FECHA_LIMITE_ABONOS, hoy) < 0) {
@@ -275,7 +336,19 @@ export async function registrarAbono(params: {
     return {
       ok: false,
       error: "SIN_CUPO",
-      mensaje: `Ya usaste los ${MAX_ABONOS} abonos permitidos.`,
+      mensaje: `Tu inscripción ya tiene los ${MAX_ABONOS} comprobantes del plan. Si algo no cuadra, escríbenos y lo revisamos contigo.`,
+    };
+  }
+
+  // El monto dejó de ser libre: cada comprobante tiene un mínimo que depende
+  // de en qué cuota va la inscripción (regla del plan de dos cuotas). Va
+  // después de `abonosDe` porque sin los abonos previos no se puede saber.
+  const exigido = montoExigido(ins, previos);
+  if (params.montoDeclarado < exigido.minimo) {
+    return {
+      ok: false,
+      error: "MONTO_INVALIDO",
+      mensaje: exigido.mensaje,
     };
   }
 
@@ -301,12 +374,13 @@ export async function registrarAbono(params: {
   anota(
     ins,
     "abono-recibido",
-    `Comprobante ${abono.numero}/${MAX_ABONOS} por ${pesosSimple(abono.montoDeclarado)} vía ${cuenta?.entidad ?? params.canal}` +
+    `Cuota ${abono.numero} de ${MAX_ABONOS} por ${pesosSimple(abono.montoDeclarado)} vía ${cuenta?.entidad ?? params.canal}` +
       (abono.referenciaExterna ? ` · ref. ${abono.referenciaExterna}` : "") +
       (params.huella?.ip ? ` · desde ${params.huella.ip}` : ""),
   );
   ins.medioPago = "TRANSFERENCIA";
-  // Un abono parcial convierte el plan; pagar todo de una lo deja en TOTAL.
+  // Media inscripción convierte el plan a dos cuotas; transferir el total de
+  // una lo deja en TOTAL y no habrá segunda cuota (§1, regla 7).
   if (abono.montoDeclarado < ins.total) ins.plan = "ABONOS";
   ins.estado = estadoDesdeAbonos(ins.total, [...previos, abono]);
   const actualizada = await guardarInscripcion(ins);
@@ -471,8 +545,8 @@ export async function verificarAbono(params: {
 /**
  * Descarta un comprobante.
  *
- * El cupo del ciclista NO se toca y el rechazo no gasta uno de los tres
- * abonos: puede corregir y volver a subir hasta la fecha de cierre
+ * El cupo del ciclista NO se toca y el rechazo no gasta ninguno de los dos
+ * comprobantes del plan: puede corregir y volver a subir hasta la fecha de cierre
  * (docs/decisiones-pago-manual.md §7). El motivo es obligatorio porque es lo
  * único que el ciclista va a leer para saber qué arreglar.
  */
@@ -560,15 +634,38 @@ export async function resumenDePago(ins: Inscripcion): Promise<{
   excedente: number;
   abonosDisponibles: number;
   cerrado: boolean;
+  /** Los dos montos con sus dos fechas, para poder enseñarlos desde el día uno. */
+  plan: CuotaDelPlan[];
+  /** En qué plan quedó: dos cuotas, o pago total. */
+  dosCuotas: boolean;
+  /** Vencimiento de la segunda cuota. `null` si no hay segunda que deba nada. */
+  venceSegundaCuota: string | null;
+  /** Lo mínimo que puede declarar el próximo comprobante. */
+  montoMinimo: number;
 }> {
   const abonos = await abonosDe(ins.id);
+  const saldo = saldoDesdeAbonos(ins.total, abonos);
+  const plan = planDeDosCuotas(ins.total, ins.creadaEn);
+  // Dos cuotas si el ciclista ya se metió en ellas (subió media inscripción) o
+  // si todavía no ha subido nada y el plazo lo permite. Cuando el saldo llega
+  // a cero deja de haber segunda cuota que enseñar.
+  const dosCuotas =
+    saldo > 0 &&
+    (ins.plan === "ABONOS" ||
+      (abonosQueCuentan(abonos).length === 0 &&
+        hayPlazoParaDosCuotas(ins.creadaEn)));
+
   return {
     abonos,
     verificado: abonadoVerificado(abonos),
-    saldo: saldoDesdeAbonos(ins.total, abonos),
+    saldo,
     excedente: excedente(ins.total, abonos),
     abonosDisponibles: Math.max(0, MAX_ABONOS - abonosQueCuentan(abonos).length),
     cerrado: diasHasta(FECHA_LIMITE_ABONOS) < 0,
+    plan,
+    dosCuotas,
+    venceSegundaCuota: dosCuotas ? plan[plan.length - 1].vence : null,
+    montoMinimo: montoMinimoDeAbono(ins, abonos),
   };
 }
 

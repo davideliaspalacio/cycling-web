@@ -10,7 +10,8 @@ import {
 import { CuentasRecaudo } from "@/components/formulario/cuentas-recaudo";
 import { Boton, Campo, Chip, Tarjeta } from "@/components/ui";
 import type { CuentaRecaudo } from "@/lib/catalogo";
-import { recorridoDe } from "@/lib/catalogo";
+import { MAX_ABONOS, recorridoDe } from "@/lib/catalogo";
+import type { CuotaDelPlan } from "@/lib/dinero";
 import { fechaLarga, pesos } from "@/lib/dinero";
 import type { CanalPago, EstadoAbono, EstadoInscripcion } from "@/lib/tipos";
 
@@ -18,8 +19,8 @@ import type { CanalPago, EstadoAbono, EstadoInscripcion } from "@/lib/tipos";
  * La página del ciclista bajo pago manual.
  *
  * Lo que antes eran botones de cobro ("adelantar cuota", "pagar el saldo")
- * aquí es una sola cosa: registrar un abono, o sea transferir y subir la
- * prueba. Nada de lo que pase en esta pantalla mueve dinero.
+ * aquí es una sola cosa: transferir la cuota que toca y subir la prueba. Nada
+ * de lo que pase en esta pantalla mueve dinero.
  *
  * La distinción que gobierna todo lo que se muestra: **abonado** es lo que un
  * revisor confirmó contra el extracto, **en revisión** es lo que el ciclista
@@ -27,7 +28,7 @@ import type { CanalPago, EstadoAbono, EstadoInscripcion } from "@/lib/tipos";
  * los suma para que nadie crea que ya pagó.
  */
 
-/** Un abono como lo puede ver su dueño: sin la clave del archivo ni la huella. */
+/** Un comprobante como lo puede ver su dueño: sin la clave del archivo ni la huella. */
 export type AbonoVisible = {
   id: string;
   numero: number;
@@ -53,6 +54,14 @@ export type ResumenPago = {
   abonosDisponibles: number;
   cerrado: boolean;
   fechaLimite: string;
+  /** Los dos montos con sus dos fechas. Se enseñan desde el día uno. */
+  plan: CuotaDelPlan[];
+  /** Si esta inscripción va por el plan de dos cuotas. */
+  dosCuotas: boolean;
+  /** Vencimiento comprometido de la segunda cuota, si queda alguna. */
+  venceSegundaCuota: string | null;
+  /** Lo que tiene que cubrir el próximo comprobante. Ya no es monto libre. */
+  montoMinimo: number;
 };
 
 export type VistaPortal = {
@@ -225,6 +234,9 @@ function Inscripcion({
   const estado = ETIQUETA_ESTADO[vista.estado];
   const completa = pago.saldo === 0;
   const puedeAbonar = !completa && !pago.cerrado && pago.abonosDisponibles > 0;
+  // El segundo comprobante es distinto del primero: cierra la inscripción y
+  // tiene fecha comprometida, así que el texto de la acción cambia.
+  const esSegundaCuota = contarQueCuentan(pago.abonos) > 0;
 
   function alRegistrar(abono: AbonoRegistrado) {
     setRecienSubido(abono);
@@ -320,13 +332,57 @@ function Inscripcion({
           </div>
           <div>
             <dt className="raya-mono text-[0.62rem] uppercase tracking-[0.12em] text-tinta/75">
-              Abonos disponibles
+              {pago.venceSegundaCuota ? "Segunda cuota vence" : "Comprobantes"}
             </dt>
             <dd className="mt-0.5 font-display text-[1.05rem] font-extrabold text-tinta">
-              {pago.abonosDisponibles}
+              {pago.venceSegundaCuota
+                ? fechaLarga(pago.venceSegundaCuota)
+                : `${contarQueCuentan(pago.abonos)} de ${MAX_ABONOS}`}
             </dd>
           </div>
         </dl>
+
+        {/*
+          Los dos montos y las dos fechas, siempre a la vista. Es lo que el
+          ciclista aceptó al inscribirse y lo que decide si pierde el cupo.
+        */}
+        {pago.dosCuotas && !completa && (
+          <div className="mt-5 rounded-2xl border-[3px] border-tinta bg-marea px-4 py-4">
+            <p className="font-mono text-[0.62rem] font-bold uppercase tracking-[0.14em] text-tinta/75">
+              Tu plan: {MAX_ABONOS} cuotas
+            </p>
+            <ol className="mt-3 flex flex-col gap-2">
+              {pago.plan.map((cuota) => {
+                // Una cuota se da por cubierta cuando lo verificado alcanza la
+                // suma de esta cuota y las anteriores.
+                const acumulado = pago.plan
+                  .slice(0, cuota.numero)
+                  .reduce((s, c) => s + c.monto, 0);
+                const cubierta = pago.verificado >= acumulado;
+                return (
+                  <li
+                    key={cuota.numero}
+                    className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b-2 border-dashed border-tinta/20 pb-2 last:border-0 last:pb-0"
+                  >
+                    <span className="font-display text-[0.92rem] font-extrabold text-tinta">
+                      Cuota {cuota.numero} de {MAX_ABONOS}
+                    </span>
+                    <span className="text-[0.84rem] text-tinta/75">
+                      {cubierta
+                        ? "Pagada y verificada"
+                        : cuota.numero === 1
+                          ? "Pendiente"
+                          : `Vence el ${fechaLarga(cuota.vence)}`}
+                    </span>
+                    <span className="raya-mono ml-auto text-[0.95rem] font-bold text-tinta">
+                      {pesos(cuota.monto)}
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        )}
 
         {pago.enRevision > 0 && !completa && (
           <p className="mt-4 text-[0.88rem] leading-relaxed text-tinta/75">
@@ -354,34 +410,40 @@ function Inscripcion({
             Escríbenos para resolver tu saldo.
           </p>
         ) : pago.abonosDisponibles === 0 ? (
+          // Sin comprobantes libres hay dos situaciones muy distintas, y decirle
+          // "escríbenos" a quien acaba de subir el último y espera revisión es
+          // mandarlo a escribir un correo que no hace falta.
           <p className="mt-5 rounded-2xl border-[3px] border-tinta bg-sol px-4 py-3 text-[0.9rem] font-semibold leading-snug text-tinta">
-            Ya usaste los abonos permitidos y aún queda saldo. Escríbenos para
-            terminar de pagar.
+            {pago.enRevision > 0
+              ? `Subiste los ${MAX_ABONOS} comprobantes de tu plan y estamos revisando el último. No tienes que hacer nada: te avisamos por correo en cuanto quede verificado.`
+              : `Ya subiste los ${MAX_ABONOS} comprobantes de tu plan y aún queda saldo. Escríbenos para terminar de pagar.`}
           </p>
         ) : (
           !abriendo && (
             <div className="mt-6 flex flex-wrap items-center gap-4">
               <Boton tamano="lg" onClick={() => setAbriendo(true)}>
-                Registrar un abono
+                {esSegundaCuota
+                  ? "Pagar la segunda cuota"
+                  : "Subir mi comprobante"}
               </Boton>
               <p className="text-[0.82rem] leading-snug text-tinta/75">
-                {pago.abonosDisponibles === 1
-                  ? "Te queda 1 abono"
-                  : `Te quedan ${pago.abonosDisponibles} abonos`}{" "}
-                de {pago.abonosDisponibles + contarQueCuentan(pago.abonos)} ·
-                hasta el {fechaLarga(pago.fechaLimite)}
+                {esSegundaCuota
+                  ? `${pesos(pago.montoMinimo)}, hasta el ${fechaLarga(pago.venceSegundaCuota ?? pago.fechaLimite)}`
+                  : `${pesos(pago.montoMinimo)} como mínimo · hasta el ${fechaLarga(pago.fechaLimite)}`}
               </p>
             </div>
           )
         )}
       </Tarjeta>
 
-      {/* --------------------------- Registrar abono ------------------------- */}
+      {/* -------------------------- Subir comprobante ------------------------ */}
       {abriendo && puedeAbonar && (
         <Tarjeta tono="nube" className="mt-5 animate-rise p-6 sm:p-8">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <h2 className="font-display text-lg font-extrabold tracking-tight text-tinta">
-              Registrar un abono
+              {esSegundaCuota
+                ? `Segunda cuota · ${pesos(pago.montoMinimo)}`
+                : `Subir comprobante · ${pesos(pago.montoMinimo)}`}
             </h2>
             <button
               type="button"
@@ -393,8 +455,10 @@ function Inscripcion({
           </div>
 
           <p className="mt-2 text-[0.92rem] leading-relaxed text-tinta/75">
-            Transfiere a una de estas cuentas y súbenos el comprobante. Copia el
-            número: transcribirlo a mano es como se pierde una transferencia.
+            Transfiere <strong className="text-tinta">{pesos(pago.montoMinimo)}</strong>{" "}
+            a una de estas cuentas y súbenos el comprobante. El monto es fijo:
+            no podemos recibirlo por menos. Copia el número de cuenta —
+            transcribirlo a mano es como se pierde una transferencia.
           </p>
 
           <CuentasRecaudo
@@ -407,7 +471,12 @@ function Inscripcion({
             <CajaEvidencia
               referencia={vista.referencia}
               cuentas={cuentas}
-              montoSugerido={pago.saldo}
+              montoSugerido={pago.montoMinimo}
+              notaMonto={
+                esSegundaCuota
+                  ? `La segunda cuota son ${pesos(pago.montoMinimo)}: cierra tu inscripción.`
+                  : `Este comprobante tiene que cubrir ${pesos(pago.montoMinimo)}.`
+              }
               onRegistrado={alRegistrar}
             />
           </div>
@@ -417,7 +486,7 @@ function Inscripcion({
       {/* ------------------------------ Historial ---------------------------- */}
       <section className="mt-6">
         <h2 className="mb-3 font-display text-lg font-extrabold tracking-tight text-tinta">
-          Tus abonos
+          Tus comprobantes
         </h2>
 
         {pago.abonos.length === 0 ? (
@@ -449,12 +518,12 @@ function Inscripcion({
   );
 }
 
-/** Cuántos abonos gastan cupo: un rechazo no consume intento. */
+/** Cuántos comprobantes gastan cupo: un rechazo no consume intento. */
 function contarQueCuentan(abonos: AbonoVisible[]): number {
   return abonos.filter((a) => a.estado !== "RECHAZADA").length;
 }
 
-/* ------------------------------- Un abono --------------------------------- */
+/* ---------------------------- Un comprobante ------------------------------ */
 
 function FilaAbono({
   abono,
@@ -533,7 +602,8 @@ function FilaAbono({
             {abono.motivoRechazo ?? "No quedó registrado el motivo."}
           </p>
           <p className="mt-2 text-[0.82rem] leading-snug text-nube/85">
-            Tu cupo sigue reservado y este intento no te gastó ningún abono.
+            Tu cupo sigue reservado y este intento no gastó ninguno de tus{" "}
+            {MAX_ABONOS} comprobantes.
           </p>
           {onVolverASubir && (
             <Boton

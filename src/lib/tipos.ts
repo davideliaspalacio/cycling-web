@@ -82,7 +82,7 @@ export type Abono = {
   id: string;
   inscripcionId: string;
   creadoEn: string;
-  /** 1..3 — ver MAX_ABONOS. */
+  /** 1 o 2: la cuota del plan a la que corresponde. Ver MAX_ABONOS. */
   numero: number;
   canal: CanalPago;
   /** En pesos, no centavos. Lo que dice el ciclista que transfirió. */

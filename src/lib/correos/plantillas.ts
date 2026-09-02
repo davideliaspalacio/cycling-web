@@ -8,7 +8,15 @@ import {
   cuentaDeCanal,
   recorridoDe,
 } from "../catalogo";
-import { fechaLarga, pesos, proximaCuota, saldoPendiente } from "../dinero";
+import {
+  fechaLarga,
+  fechaSegundaCuota,
+  montosDelPlan,
+  pesos,
+  planDeDosCuotas,
+  proximaCuota,
+  saldoPendiente,
+} from "../dinero";
 import type { Abono, DatosCiclista, Inscripcion } from "../tipos";
 import { categoriaPorCodigo } from "../catalogo";
 
@@ -189,8 +197,28 @@ function tablaCuentas(): string {
 /** El plazo de recepción, dicho igual en todos los correos. */
 function avisoDeCierre(): string {
   return parrafo(
-    `Recibimos comprobantes hasta el <strong>${fechaLarga(FECHA_LIMITE_ABONOS)}</strong>. Después de esa fecha no podemos recibir más abonos.`,
+    `Recibimos comprobantes hasta el <strong>${fechaLarga(FECHA_LIMITE_ABONOS)}</strong>. Después de esa fecha no podemos recibir ninguno más.`,
   );
+}
+
+/**
+ * Las dos cuotas con sus dos fechas.
+ *
+ * Va en el correo entero y no como enlace porque es lo único que el ciclista
+ * necesita para no pasarse de fecha: cuánto y cuándo, las dos veces.
+ */
+function tablaDelPlan(ins: Inscripcion): string {
+  const cuotas = planDeDosCuotas(ins.total, ins.creadaEn);
+  const filas = cuotas
+    .map(
+      (c) => `<tr>
+        <td style="padding:11px 0;border-bottom:1px solid ${LINEA};font-family:${MONO};font-size:14px;font-weight:700;color:${TINTA}">Cuota ${c.numero} de ${MAX_ABONOS}</td>
+        <td style="padding:11px 0;border-bottom:1px solid ${LINEA};font-family:${FUENTE};font-size:13px;color:${GRIS}">${c.numero === 1 ? "Al inscribirte" : `Hasta el ${fechaLarga(c.vence)}`}</td>
+        <td align="right" style="padding:11px 0;border-bottom:1px solid ${LINEA};font-family:${MONO};font-size:15px;font-weight:700;color:${TINTA}">${pesos(c.monto)}</td>
+      </tr>`,
+    )
+    .join("");
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:18px 0 6px">${filas}</table>`;
 }
 
 /** Cuadro de motivo, para lo que el ciclista tiene que leer sí o sí. */
@@ -241,34 +269,33 @@ export function inscripcionConfirmada(ins: Inscripcion): PlantillaCorreo {
 
 export function planCuotasActivado(ins: Inscripcion): PlantillaCorreo {
   const cat = categoriaPorCodigo(ins.categoriaCodigo);
-  const siguiente = proximaCuota(ins.cuotas);
+  const segunda = montosDelPlan(ins.total)[MAX_ABONOS - 1];
+  const vence = fechaSegundaCuota(ins.creadaEn);
   const cuerpo =
     parrafo(
-      `${nombreCorto(ins)}, tu cupo en <strong>${cat?.nombre}</strong> ya está reservado. Puedes pagarlo hasta en ${MAX_ABONOS} abonos: transfieres cuando puedas y subes el comprobante de cada uno.`,
+      `${nombreCorto(ins)}, tu cupo en <strong>${cat?.nombre}</strong> ya está reservado con la primera cuota. Queda una sola cuota más, de <strong>${pesos(segunda)}</strong>, con plazo hasta el <strong>${fechaLarga(vence)}</strong>.`,
     ) +
     barraProgreso(ins.pagado, ins.total) +
-    tablaCuotas(ins) +
-    (siguiente
-      ? parrafo(
-          `<strong>El plan sugerido es de ${pesos(siguiente.monto)} hacia el ${fechaLarga(siguiente.vence)}</strong>, pero los montos y las fechas los pones tú: lo único que manda es que el total quede cubierto antes del cierre.`,
-        )
-      : "") +
-    tablaCuentas() +
-    boton("Subir mi comprobante", urlPortal(ins)) +
+    tablaDelPlan(ins) +
     parrafo(
-      `Un abono cuenta cuando lo verificamos, no cuando lo transfieres: revisamos cada comprobante a mano y te avisamos por correo.`,
+      `El monto y la fecha son fijos: no es "abona lo que puedas". Si el ${fechaLarga(vence)} pasa con saldo, la inscripción queda vencida y hay que hablarlo con la organización.`,
+    ) +
+    tablaCuentas() +
+    boton("Subir el comprobante de la segunda cuota", urlPortal(ins)) +
+    parrafo(
+      `Una cuota cuenta cuando la verificamos, no cuando la transfieres: revisamos cada comprobante a mano y te avisamos por correo.`,
     ) +
     avisoDeCierre();
   return {
-    asunto: `Cupo reservado — págalo hasta en ${MAX_ABONOS} abonos · ${cat?.nombre}`,
+    asunto: `Cupo reservado — falta la segunda cuota de ${pesos(segunda)} · ${cat?.nombre}`,
     html: envoltura({
-      eyebrow: "Pago por abonos",
+      eyebrow: "Pago en dos cuotas",
       titulo: `Cupo reservado. Vas por ${pesos(ins.pagado)} de ${pesos(ins.total)}.`,
       colorEyebrow: SOL,
       cuerpo,
       ins,
     }),
-    texto: `${nombreCorto(ins)}, tu cupo quedó reservado y puedes pagarlo hasta en ${MAX_ABONOS} abonos. Llevas ${pesos(ins.pagado)} de ${pesos(ins.total)}. Transfiere y sube el comprobante desde ${urlPortal(ins)}.`,
+    texto: `${nombreCorto(ins)}, tu cupo quedó reservado. Falta la segunda cuota de ${pesos(segunda)}, con plazo hasta el ${fechaLarga(vence)}. Transfiere y sube el comprobante desde ${urlPortal(ins)}.`,
   };
 }
 
@@ -315,29 +342,40 @@ export function recordatorioCuota(
   numero: number,
   dias: number,
 ): PlantillaCorreo {
-  const cuota = ins.cuotas.find((c) => c.numero === numero)!;
+  // Las inscripciones por transferencia tienen la tabla `cuotas` vacía —bajo
+  // pago manual el libro de dinero son los abonos—, así que el monto y la
+  // fecha se derivan del saldo y del plan. La rama de `ins.cuotas` es solo
+  // para las inscripciones viejas de la pasarela.
+  const deLaPasarela = ins.cuotas.find((c) => c.numero === numero);
+  const monto = deLaPasarela?.monto ?? Math.max(0, ins.total - ins.pagado);
+  const vence = deLaPasarela?.vence ?? fechaSegundaCuota(ins.creadaEn);
+  const esSegundaCuota = !deLaPasarela && ins.plan === "ABONOS";
   const cuando = dias === 0 ? "hoy" : dias === 1 ? "mañana" : `en ${dias} días`;
+  const queEs = esSegundaCuota
+    ? `la <strong>segunda y última cuota</strong> de tu inscripción`
+    : `lo que falta de tu inscripción`;
   const cuerpo =
     parrafo(
-      `${nombreCorto(ins)}, te toca abonar <strong>${pesos(cuota.monto)}</strong> ${cuando}. <strong>Este pago no sale solo:</strong> tienes que transferir a una de nuestras cuentas y subir el comprobante para que cuente.`,
+      `${nombreCorto(ins)}, vence ${cuando} ${queEs}: <strong>${pesos(monto)}</strong>, el ${fechaLarga(vence)}. <strong>Este pago no sale solo:</strong> tienes que transferir a una de nuestras cuentas y subir el comprobante para que cuente.`,
     ) +
     barraProgreso(ins.pagado, ins.total) +
+    (esSegundaCuota ? tablaDelPlan(ins) : "") +
     tablaCuentas() +
     boton("Subir mi comprobante", urlPortal(ins), TURQUESA) +
     parrafo(
-      `Puedes abonar más o menos de lo sugerido: lo que importa es que el total quede cubierto. Si ya transferiste y subiste el comprobante, ignora este correo — puede que aún lo estemos revisando.`,
+      `El monto es fijo: este comprobante tiene que cubrir los ${pesos(monto)} que faltan. Si ya transferiste y lo subiste, ignora este correo — puede que aún lo estemos revisando.`,
     ) +
     avisoDeCierre();
   return {
-    asunto: `Te toca abonar ${pesos(cuota.monto)} ${cuando} — hay que transferir`,
+    asunto: `Vence ${cuando}: ${pesos(monto)} de tu inscripción — hay que transferir`,
     html: envoltura({
-      eyebrow: `Abono ${cuando}`,
-      titulo: `Te toca transferir ${pesos(cuota.monto)}.`,
+      eyebrow: `Vence ${cuando}`,
+      titulo: `Te toca transferir ${pesos(monto)}.`,
       colorEyebrow: MAREA,
       cuerpo,
       ins,
     }),
-    texto: `Recordatorio: te toca abonar ${pesos(cuota.monto)} ${cuando}. Nadie cobra automáticamente: transfiere y sube el comprobante en ${urlPortal(ins)}.`,
+    texto: `Recordatorio: vence ${cuando} (${fechaLarga(vence)}) el pago de ${pesos(monto)}. Nadie cobra automáticamente: transfiere y sube el comprobante en ${urlPortal(ins)}.`,
   };
 }
 
@@ -355,7 +393,7 @@ export function evidenciaRechazada(
 ): PlantillaCorreo {
   const cuerpo =
     parrafo(
-      `${nombreCorto(ins)}, revisamos el comprobante que subiste por <strong>${pesos(datos.monto)}</strong> y no lo pudimos dar por bueno. <strong>Tu cupo sigue reservado</strong> y este intento no gasta ninguno de tus ${MAX_ABONOS} abonos.`,
+      `${nombreCorto(ins)}, revisamos el comprobante que subiste por <strong>${pesos(datos.monto)}</strong> y no lo pudimos dar por bueno. <strong>Tu cupo sigue reservado</strong> y este intento no gasta ninguno de los ${MAX_ABONOS} comprobantes de tu plan.`,
     ) +
     recuadroMotivo("Por qué lo rechazamos", datos.motivo) +
     parrafo(
@@ -439,7 +477,7 @@ export function evidenciaRecibida(
     ) +
     barraProgreso(datos.verificado, ins.total) +
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:18px 0 6px">
-      ${filaDato("Comprobante", `${abono.numero} de ${MAX_ABONOS}`)}
+      ${filaDato("Cuota", `${abono.numero} de ${MAX_ABONOS}`)}
       ${filaDato("Declaraste", pesos(abono.montoDeclarado), true)}
       ${filaDato("Canal", nombreDeCanal(abono))}
       ${abono.transferidoEl ? filaDato("Fecha de la transferencia", fechaLarga(abono.transferidoEl)) : ""}
@@ -490,25 +528,26 @@ export function evidenciaVerificada(
       : "") +
     barraProgreso(datos.verificado, ins.total) +
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:18px 0 6px">
-      ${filaDato("Abono verificado", pesos(aprobado))}
+      ${filaDato("Cuota verificada", pesos(aprobado))}
       ${filaDato("Llevas pagado", pesos(datos.verificado))}
       ${filaDato("Te falta", pesos(datos.saldo), true)}
     </table>` +
     parrafo(
-      `Te faltan <strong>${pesos(datos.saldo)}</strong>. Puedes abonarlos de una vez o repartirlos: llevas ${abono.numero} de ${MAX_ABONOS} comprobantes.`,
+      `Falta la <strong>segunda y última cuota: ${pesos(datos.saldo)}</strong>, con plazo hasta el <strong>${fechaLarga(fechaSegundaCuota(ins.creadaEn))}</strong>. Es un solo comprobante más y tiene que cubrir ese monto completo.`,
     ) +
+    tablaDelPlan(ins) +
     tablaCuentas() +
-    boton("Subir el siguiente comprobante", urlPortal(ins)) +
+    boton("Subir el comprobante de la segunda cuota", urlPortal(ins)) +
     avisoDeCierre();
   return {
-    asunto: `Abono verificado: ${pesos(aprobado)} — te faltan ${pesos(datos.saldo)}`,
+    asunto: `Cuota verificada: ${pesos(aprobado)} — te faltan ${pesos(datos.saldo)}`,
     html: envoltura({
-      eyebrow: "Abono verificado",
+      eyebrow: "Cuota verificada",
       titulo: `Confirmamos ${pesos(aprobado)}.`,
       cuerpo,
       ins,
     }),
-    texto: `Verificamos tu abono de ${pesos(aprobado)}. Llevas ${pesos(datos.verificado)} de ${pesos(ins.total)} y te faltan ${pesos(datos.saldo)}.`,
+    texto: `Verificamos tu cuota de ${pesos(aprobado)}. Llevas ${pesos(datos.verificado)} de ${pesos(ins.total)} y te faltan ${pesos(datos.saldo)}.`,
   };
 }
 

@@ -1,25 +1,69 @@
 # Pago manual — decisiones tomadas
 
-El documento del cliente no fija estas reglas. Las decidí para poder avanzar;
-todas son de una línea y están marcadas en el código con el comentario
-`DECISIÓN PENDIENTE DE CONFIRMAR`. Cambiarlas no rompe el esquema.
+El documento del cliente no fija todas estas reglas. Las que llevan
+`DECISIÓN PENDIENTE DE CONFIRMAR` en el código las decidí para poder avanzar y
+son de una línea. Las §1 y §2 ya no son de esas: **son lo que pidió la
+organización.**
 
-## 1. Abonos, no cuotas fijas
+## 1. Dos cuotas fijas (confirmado por el cliente)
 
-El documento ofrece "Pago total / Pago parcial" y tres casillas de abono.
-Se retira el plan de 4 cuotas del día 5: **nadie cobra automáticamente**, así
-que un calendario de cobro no representa nada real.
+Reemplaza al esquema anterior de "hasta 3 abonos de monto libre". Se retira
+también el plan de 4 cuotas del día 5 de la pasarela: **nadie cobra
+automáticamente**, así que un calendario de cobro no representa nada real.
 
 - `TOTAL`: un solo pago de $380.000.
-- `ABONOS`: hasta **3** abonos de monto libre.
+- `ABONOS`: **2 cuotas de $190.000**. `MAX_ABONOS = 2`, y ese número es a la vez
+  el de cuotas y el de comprobantes: uno por cuota.
 
-La verdad del saldo son los abonos verificados, no una tabla de cuotas:
-`saldo = total − Σ(abonos verificados)`. Las cuotas quedan como plan sugerido.
+El reparto sale de `repartirEnCuotas(380000, 2)` para que un precio que no
+parta en mitades exactas siga sumando el total al peso.
 
-## 2. Sin monto mínimo
+La verdad del saldo siguen siendo los comprobantes verificados, no una tabla de
+cuotas: `saldo = total − Σ(abonos verificados)`. La tabla `cuotas` sigue siendo
+la de la pasarela vieja y las inscripciones por transferencia la tienen vacía.
 
-`ABONO_MINIMO = 0`. Cualquier monto vale. Si la organización quiere exigir
-un anticipo, es cambiar esa constante.
+### La fecha de la segunda cuota
+
+`DIAS_ENTRE_CUOTAS = 45`, contados **desde la fecha de inscripción**, no desde
+que la organización verifica la primera. El ciclista no controla cuándo
+revisamos; anclarlo a la revisión le movería la fecha bajo los pies, y así ve
+las dos fechas desde el minuto uno.
+
+Se acota contra el cierre: `min(inscripción + 45 días, FECHA_LIMITE_ABONOS)`.
+Hace falta — quien se inscriba el 20 de mayo de 2027 tendría la segunda cuota
+el 4 de julio, un día **después** de la carrera.
+
+### Cuando ya no caben las dos cuotas
+
+`MARGEN_MINIMO_DOS_CUOTAS = 15` días. Si al inscribirse quedan menos de quince
+días hasta `FECHA_LIMITE_ABONOS`, **el plan de dos cuotas no se ofrece**: solo
+pago total, y la interfaz explica por qué en vez de mostrar la opción y fallar
+después. El umbral es mío, no del cliente: con menos de dos semanas el tope
+contra el cierre aplasta las dos fechas una contra otra y el "plazo" deja de
+serlo —hay que transferir *y* darnos tiempo de revisarlo antes del cierre.
+Subirlo o bajarlo es cambiar esa constante.
+
+Si el ciclista transfiere el total con el primer comprobante, queda saldado y no
+hay segunda cuota: el plan se queda en `TOTAL`.
+
+## 2. El monto de cada cuota es fijo (confirmado por el cliente)
+
+Se acabó el "abona lo que puedas". `ABONO_MINIMO` desapareció: ya no hay una
+constante única, porque el mínimo depende de en qué cuota va la inscripción.
+Lo calcula `montoMinimoDeAbono` (`src/lib/servicio.ts`), que es el único sitio
+que conoce los abonos previos:
+
+- **Primer comprobante**: la primera cuota ($190.000) o el total ($380.000). Si
+  el plan de dos cuotas no se le llegó a ofrecer (§1), el total y nada menos.
+- **Segundo comprobante**: tiene que cubrir el saldo completo. Es el último que
+  admite el plan; aceptarlo por menos dejaría un saldo sin ninguna vía de pago.
+
+`src/lib/validacion.ts` solo comprueba que sea una cifra —pesos enteros y
+positivos—; la regla de negocio vive en el servicio.
+
+Esto filtra lo que el **ciclista declara**, no lo que la organización confirma:
+el revisor sigue pudiendo aprobar por un monto distinto al declarado (§6), que
+pasa constantemente.
 
 ## 3. El ticket sale solo con el pago completo
 

@@ -18,6 +18,7 @@ import {
   abonadoVerificado,
   excedente,
   fechaLarga,
+  montosDelPlan,
   pesos,
   saldoDesdeAbonos,
 } from "@/lib/dinero";
@@ -177,7 +178,7 @@ function Comprobante({ fila }: { fila: Fila }) {
           {abono.estado === "EN_REVISION" ? "En revisión" : "Sin revisar"}
         </Chip>
         <Chip tono="nube">
-          Abono {abono.numero}/{MAX_ABONOS}
+          Cuota {abono.numero} de {MAX_ABONOS}
         </Chip>
         <span className="raya-mono text-[0.7rem] text-tinta/75">
           Subido el{" "}
@@ -245,6 +246,15 @@ function Comprobante({ fila }: { fila: Fila }) {
                   valor={cat?.nombre ?? inscripcion.categoriaCodigo}
                 />
                 <Dato etiqueta="Total" valor={pesos(inscripcion.total)} />
+                {/*
+                  Lo que le tocaba a esta cuota, para poder confrontarlo con el
+                  extracto. El revisor puede aprobar por otro monto —pasa
+                  constantemente—, pero tiene que ver contra qué se compara.
+                */}
+                <Dato
+                  etiqueta={`Cuota ${abono.numero} del plan`}
+                  valor={pesos(montosDelPlan(inscripcion.total)[abono.numero - 1] ?? inscripcion.total)}
+                />
                 <Dato etiqueta="Ya verificado" valor={pesos(verificado)} />
                 <Dato
                   etiqueta="Saldo"

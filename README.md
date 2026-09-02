@@ -100,13 +100,23 @@ no es una tabla de cuotas programadas sino la suma de los abonos verificados.
 saldo = total − Σ(abonos verificados)
 ```
 
-### Abonos
+### Las dos formas de pagar
 
 - **Pago total**: un movimiento por $380.000.
-- **Abonos**: hasta **3**, de monto libre.
+- **Dos cuotas**: $190.000 al inscribirse y $190.000 **45 días después**.
 
-Un abono **rechazado no gasta intento**. El excedente (si alguien transfiere de
-más) se expone aparte y **nunca** hace el saldo negativo.
+La fecha de la segunda cuota se ancla a la inscripción, no a cuándo se
+verifique la primera: el ciclista no controla cuándo revisa la organización,
+así que ve las dos fechas desde el minuto uno.
+
+Esa fecha se acota contra el cierre de comprobantes —`min(inscripción + 45
+días, FECHA_LIMITE_ABONOS)`—, porque si no, quien se inscriba a tres semanas
+de la carrera tendría la segunda cuota **después** de correrla. Y cuando ya no
+quedan 15 días de margen, el plan directamente no se ofrece: la página lo
+explica en vez de aceptarlo y fallar más tarde.
+
+Un comprobante **rechazado no gasta intento**. El excedente (si alguien
+transfiere de más) se expone aparte y **nunca** hace el saldo negativo.
 
 ### Ciclo de vida de un abono
 

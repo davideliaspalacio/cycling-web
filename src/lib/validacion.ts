@@ -1,6 +1,5 @@
 import { z } from "zod";
 import {
-  ABONO_MINIMO,
   ANIO_CARRERA,
   CANALES_PAGO,
   CATEGORIAS,
@@ -117,6 +116,12 @@ export function avisoDeCategoria(
  * el monto se convierte aquí y no se confía en que venga como número. El
  * archivo NO se valida con zod: eso se hace mirando sus bytes en
  * `src/lib/almacenamiento.ts`.
+ *
+ * Aquí el monto solo se comprueba como cifra: que sean pesos enteros y
+ * positivos. **El mínimo real ya no es una constante** —desde el plan de dos
+ * cuotas depende de si es el primer comprobante o el segundo y de cuánto se
+ * verificó antes—, así que esa regla vive en `montoMinimoDeAbono`
+ * (`src/lib/servicio.ts`), que es el único sitio que conoce la inscripción.
  */
 export const esquemaAbono = z.object({
   referencia: texto(4, 40, "la referencia de tu inscripción").toUpperCase(),
@@ -131,10 +136,6 @@ export const esquemaAbono = z.object({
     .refine(
       (v) => Number.isInteger(v) && v > 0,
       "El monto son pesos enteros, sin centavos.",
-    )
-    .refine(
-      (v) => v >= ABONO_MINIMO,
-      `El abono mínimo es $${ABONO_MINIMO.toLocaleString("es-CO")}.`,
     ),
   transferidoEl: z
     .string()

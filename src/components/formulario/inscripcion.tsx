@@ -22,6 +22,7 @@ import {
 import { pesos } from "@/lib/dinero";
 import { avisoDeCategoria, esquemaCiclista, esquemaTallas } from "@/lib/validacion";
 import type { CuentaRecaudo } from "@/lib/catalogo";
+import type { CuotaDelPlan } from "@/lib/dinero";
 import type { DatosCiclista, Tallas as TipoTallas } from "@/lib/tipos";
 import { PasoPago } from "./paso-pago";
 import { MEDIDAS, TextosLegales } from "./legales";
@@ -59,6 +60,8 @@ export function FormularioInscripcion({
   categoriaInicial,
   cuentas,
   fechaLimite,
+  plan,
+  dosCuotas,
 }: {
   categoriaInicial?: string;
   /**
@@ -69,6 +72,10 @@ export function FormularioInscripcion({
   cuentas: CuentaRecaudo[];
   /** Último día para subir comprobantes (ISO). */
   fechaLimite: string;
+  /** Las dos cuotas con sus dos fechas, resueltas en el servidor. */
+  plan: CuotaDelPlan[];
+  /** Si a día de hoy todavía cabe el plan de dos cuotas antes del cierre. */
+  dosCuotas: boolean;
 }) {
   const router = useRouter();
   const [paso, setPaso] = useState(categoriaInicial ? 1 : 0);
@@ -245,6 +252,8 @@ export function FormularioInscripcion({
             tallas={tallas}
             cuentas={cuentas}
             fechaLimite={fechaLimite}
+            plan={plan}
+            dosCuotas={dosCuotas}
             onCompletado={() => router.push(`/mi-inscripcion?ref=${referencia}`)}
           />
         )}

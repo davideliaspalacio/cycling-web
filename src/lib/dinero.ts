@@ -1,4 +1,11 @@
-import { CUOTAS_DEL_PLAN, DIA_DE_COBRO } from "./catalogo";
+import {
+  CUOTAS_DEL_PLAN,
+  DIAS_ENTRE_CUOTAS,
+  DIA_DE_COBRO,
+  FECHA_LIMITE_ABONOS,
+  MARGEN_MINIMO_DOS_CUOTAS,
+  MAX_ABONOS,
+} from "./catalogo";
 import type { Abono, Cuota, EstadoInscripcion } from "./tipos";
 
 const formatoCOP = new Intl.NumberFormat("es-CO", {
@@ -15,9 +22,9 @@ export function pesos(valor: number): string {
  * Reparte un total en N cuotas redondeadas al millar más cercano,
  * garantizando que la suma sea exactamente el total.
  *
- * Sobrevive al retiro de la pasarela porque sigue sirviendo para proponer un
- * reparto de abonos: 3 abonos de $126.667 no se los dice nadie a un ciclista.
- * 380.000 en 4 → 95.000 · 95.000 · 95.000 · 95.000
+ * Sobrevive al retiro de la pasarela porque es lo que parte el precio en las
+ * dos cuotas del plan: 380.000 en 2 → 190.000 · 190.000.
+ * (Con la pasarela era 380.000 en 4 → 95.000 × 4.)
  */
 export function repartirEnCuotas(total: number, n = CUOTAS_DEL_PLAN): number[] {
   const base = Math.floor(total / n / 1000) * 1000;
@@ -35,6 +42,80 @@ export function repartirEnCuotas(total: number, n = CUOTAS_DEL_PLAN): number[] {
 
 function isoFecha(d: Date): string {
   return d.toISOString().slice(0, 10);
+}
+
+/* ------------------------- El plan de dos cuotas --------------------------- */
+
+/**
+ * Los montos de las dos cuotas. 380.000 → [190.000, 190.000].
+ *
+ * Sale de `repartirEnCuotas` y no de una división a pelo para que un precio que
+ * no parta en mitades exactas siga sumando el total al peso.
+ */
+export function montosDelPlan(total: number): number[] {
+  return repartirEnCuotas(total, MAX_ABONOS);
+}
+
+/** La parte de fecha de un ISO, venga con hora (`creadaEn`) o sin ella. */
+function soloFecha(iso: string): string {
+  return iso.slice(0, 10);
+}
+
+/** Suma días a una fecha ISO en UTC. Sin husos: aquí un día es un día. */
+export function sumarDias(iso: string, dias: number): string {
+  const [y, m, d] = soloFecha(iso).split("-").map(Number);
+  return isoFecha(new Date(Date.UTC(y, m - 1, d + dias)));
+}
+
+/**
+ * Cuándo vence la segunda cuota.
+ *
+ * Dos reglas y en este orden: 45 días desde la **fecha de inscripción** (no
+ * desde que verificamos la primera cuota), y nunca después del cierre de
+ * recepción de comprobantes. Sin ese tope, quien se inscriba el 20 de mayo de
+ * 2027 tendría la segunda cuota el 4 de julio: un día después de la carrera.
+ */
+export function fechaSegundaCuota(inscritaEl: string): string {
+  const natural = sumarDias(inscritaEl, DIAS_ENTRE_CUOTAS);
+  return natural > FECHA_LIMITE_ABONOS ? FECHA_LIMITE_ABONOS : natural;
+}
+
+/**
+ * Si a esta fecha todavía cabe un plan de dos cuotas con sentido.
+ *
+ * Cuando falta poco para el cierre, el tope de `fechaSegundaCuota` aplasta las
+ * dos fechas una contra otra. Antes que ofrecer un plazo que no existe, se
+ * ofrece solo pago total (docs/decisiones-pago-manual.md §1).
+ */
+export function hayPlazoParaDosCuotas(hoy: string | Date = new Date()): boolean {
+  const desde = typeof hoy === "string" ? soloFecha(hoy) : isoFecha(hoy);
+  return diasHasta(FECHA_LIMITE_ABONOS, new Date(`${desde}T00:00:00Z`)) >=
+    MARGEN_MINIMO_DOS_CUOTAS;
+}
+
+export type CuotaDelPlan = {
+  numero: number;
+  monto: number;
+  /** ISO (YYYY-MM-DD). */
+  vence: string;
+};
+
+/**
+ * El plan completo tal como se le enseña al ciclista: los dos montos y las dos
+ * fechas, desde el minuto uno. La primera vence el día de la inscripción —se
+ * paga en el acto—, la segunda 45 días después o en el cierre, lo que llegue
+ * antes.
+ */
+export function planDeDosCuotas(
+  total: number,
+  inscritaEl: string,
+): CuotaDelPlan[] {
+  const montos = montosDelPlan(total);
+  return montos.map((monto, i) => ({
+    numero: i + 1,
+    monto,
+    vence: i === 0 ? soloFecha(inscritaEl) : fechaSegundaCuota(inscritaEl),
+  }));
 }
 
 /**

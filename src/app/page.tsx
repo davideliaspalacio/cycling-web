@@ -1,6 +1,7 @@
+import Image from "next/image";
 import Link from "next/link";
 import { Encabezado, Pie } from "@/components/marco";
-import { Cuenta, HeroAltimetria } from "@/components/hero-altimetria";
+import { Cuenta } from "@/components/hero-altimetria";
 import { BotonEnlace, Chip, Tarjeta, TituloSeccion } from "@/components/ui";
 import {
   CATEGORIAS,
@@ -9,6 +10,7 @@ import {
   FECHA_LIMITE_ABONOS,
   GRUPOS,
   MAX_ABONOS,
+  NOMBRE_COMPLETO,
   PRECIO_INSCRIPCION,
   categoriasDeGrupo,
   recorridoDe,
@@ -24,6 +26,30 @@ const CINTA = [
   `HASTA ${MAX_ABONOS} ABONOS`,
 ];
 
+const CARTELES = [
+  {
+    src: "/fotos/apertura.jpg",
+    w: 1080,
+    h: 1350,
+    alt: `Cartel de apertura de inscripciones: ${pesos(PRECIO_INSCRIPCION)}, 150 cupos disponibles, apertura el 3 de septiembre`,
+    pie: "Apertura de inscripciones",
+  },
+  {
+    src: "/fotos/cartel-post.jpg",
+    w: 1080,
+    h: 1350,
+    alt: `Cartel de ${NOMBRE_COMPLETO} con la fecha de la carrera`,
+    pie: `${EVENTO.fechaLegible}`,
+  },
+  {
+    src: "/fotos/cartel-historia.jpg",
+    w: 1080,
+    h: 1920,
+    alt: `Cartel vertical de ${NOMBRE_COMPLETO} para compartir en historias`,
+    pie: "Para compartir en historias",
+  },
+];
+
 export default function Inicio() {
   // Los nombres de los destinos de recaudo salen del catálogo, que aquí corre
   // en el servidor. Solo se anuncian las entidades: los números se entregan
@@ -36,43 +62,58 @@ export default function Inicio() {
 
       <main className="flex-1">
         {/* ------------------------------ Héroe ------------------------------ */}
-        <section className="mx-auto w-full max-w-6xl px-4 pb-14 pt-12 sm:px-6 sm:pt-16">
-          <div className="flex flex-wrap items-center gap-3">
-            <Chip tono="turquesa">
-              {EVENTO.edicionOrdinal} Edición · {EVENTO.lema}
-            </Chip>
-            <Chip tono="rio">
-              {EVENTO.fechaLegible} · {EVENTO.lugar}
-            </Chip>
-            <span className="raya-mono text-[0.72rem] text-tinta/75">
-              Faltan <Cuenta hasta={EVENTO.fecha} />
-            </span>
+        <section className="mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-10 px-4 pb-14 pt-12 sm:px-6 sm:pt-16 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14">
+          <div>
+            <div className="flex flex-wrap items-center gap-3">
+              <Chip tono="turquesa">
+                {EVENTO.edicionOrdinal} Edición · {EVENTO.lema}
+              </Chip>
+              <Chip tono="rio">
+                {EVENTO.fechaLegible} · {EVENTO.lugar}
+              </Chip>
+              <span className="raya-mono text-[0.72rem] text-tinta/75">
+                Faltan <Cuenta hasta={EVENTO.fecha} />
+              </span>
+            </div>
+
+            <h1 className="mt-6 font-display text-[clamp(2.7rem,7.4vw,4.8rem)] font-extrabold leading-[0.9] tracking-[-0.045em] text-tinta">
+              Nadie hereda
+              <br />
+              <span className="text-rio">un legado.</span>
+            </h1>
+
+            <p className="mt-6 max-w-xl text-lg leading-relaxed text-tinta/75">
+              {EVENTO.etapas} etapas de XCM entre los caminos reales, la piedra y el
+              calor de {EVENTO.lugar}. Inscribirse debería costar mucho menos
+              esfuerzo que eso: cinco pasos, y pagas de una o en abonos.
+            </p>
+
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <BotonEnlace href="/inscripcion" tamano="lg">
+                Inscribirme
+              </BotonEnlace>
+              <BotonEnlace href="#categorias" tono="rio" tamano="lg">
+                Ver categorías
+              </BotonEnlace>
+            </div>
           </div>
 
-          <h1 className="mt-6 max-w-4xl font-display text-[clamp(2.7rem,8.2vw,5.6rem)] font-extrabold leading-[0.9] tracking-[-0.045em] text-tinta">
-            Nadie hereda
-            <br />
-            <span className="text-rio">un legado.</span>
-          </h1>
-
-          <p className="mt-6 max-w-xl text-lg leading-relaxed text-tinta/75">
-            {EVENTO.etapas} etapas de XCM entre los caminos reales, la piedra y el
-            calor de {EVENTO.lugar}. Inscribirse debería costar mucho menos
-            esfuerzo que eso: cinco pasos, y pagas de una o en abonos.
-          </p>
-
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <BotonEnlace href="/inscripcion" tamano="lg">
-              Inscribirme
-            </BotonEnlace>
-            <BotonEnlace href="#categorias" tono="rio" tamano="lg">
-              Ver categorías
-            </BotonEnlace>
-          </div>
-
-          <div className="mt-14">
-            <HeroAltimetria />
-          </div>
+          <figure className="tinta animate-rise overflow-hidden rounded-[22px] bg-nube [--rise-rot:1deg]">
+            <Image
+              src="/fotos/pareja-canon.jpg"
+              alt="Dos ciclistas subiendo por la carretera del cañón durante una edición anterior de Santander Xtreme"
+              width={1333}
+              height={2000}
+              priority
+              sizes="(max-width: 1024px) 100vw, 46vw"
+              className="h-[clamp(20rem,52vw,32rem)] w-full object-cover object-[center_28%]"
+            />
+            <figcaption className="border-t-[3px] border-tinta bg-rio px-4 py-2.5">
+              <p className="raya-mono text-[0.66rem] font-bold uppercase tracking-[0.14em] text-nube">
+                Barichara · el pueblo más lindo de Colombia
+              </p>
+            </figcaption>
+          </figure>
         </section>
 
         {/* ------------------------------ Cinta ------------------------------ */}
@@ -88,6 +129,44 @@ export default function Inicio() {
             ))}
           </div>
         </div>
+
+        {/* ------------------------------ Cartel ----------------------------- */}
+        <section className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6">
+          <TituloSeccion
+            eyebrow="El cartel"
+            titulo="La convocatoria."
+            bajada="Las piezas oficiales del evento, tal como circulan por redes. Guárdalas o compártelas para invitar a tu grupo."
+          />
+
+          <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {CARTELES.map((c, i) => (
+              <figure
+                key={c.src}
+                className="tinta animate-rise overflow-hidden rounded-[18px] bg-nube"
+                style={{
+                  // Cada uno cae con un retardo distinto y una inclinación
+                  // mínima: parecen calcomanías pegadas a mano, no una tabla.
+                  animationDelay: `${i * 0.09}s`,
+                  ["--rise-rot" as string]: i % 2 === 0 ? "-0.8deg" : "0.8deg",
+                }}
+              >
+                <Image
+                  src={c.src}
+                  alt={c.alt}
+                  width={c.w}
+                  height={c.h}
+                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                  className="h-auto w-full"
+                />
+                <figcaption className="border-t-[3px] border-tinta px-4 py-2.5">
+                  <p className="raya-mono text-[0.66rem] font-bold uppercase tracking-[0.14em] text-tinta/75">
+                    {c.pie}
+                  </p>
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        </section>
 
         {/* --------------------------- Categorías ---------------------------- */}
         <section

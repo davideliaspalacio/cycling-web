@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { CUENTAS_RECAUDO, EVENTO, NOMBRE_COMPLETO } from "@/lib/catalogo";
 import { BotonEnlace } from "./ui";
@@ -18,6 +19,25 @@ export function Logo({ className = "" }: { className?: string }) {
         {EVENTO.wordmark.sufijo}
       </span>
     </Link>
+  );
+}
+
+/**
+ * El logotipo oficial, el de los carteles. Solo donde hay altura para que se
+ * lea: es un bloque apilado y por debajo de unos 70 px no dice nada.
+ */
+export function LogoOficial({ className = "" }: { className?: string }) {
+  return (
+    <Image
+      src="/marca/logo.png"
+      alt={NOMBRE_COMPLETO}
+      width={583}
+      height={629}
+      // Sin optimizador: son 36 KB y al pasarlo a PNG con paleta el navegador
+      // no lo decodifica. Optimizar aquí no ahorra nada.
+      unoptimized
+      className={`w-auto ${className}`}
+    />
   );
 }
 
@@ -69,8 +89,8 @@ export function Pie() {
     <footer className="mt-24 border-t-[3px] border-tinta bg-bruma">
       <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-12 sm:px-6 md:grid-cols-[1.4fr_1fr_1fr]">
         <div>
-          <Logo />
-          <p className="mt-3 max-w-xs text-sm leading-relaxed text-tinta/75">
+          <LogoOficial className="h-20" />
+          <p className="mt-4 max-w-xs text-sm leading-relaxed text-tinta/75">
             Maratón de montaña en {EVENTO.lugar}. {EVENTO.etapas} etapas de XCM
             entre caminos reales, piedra y el calor del cañón del Chicamocha.
           </p>

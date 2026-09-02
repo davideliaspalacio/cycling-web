@@ -194,9 +194,11 @@ export const CATEGORIAS: Categoria[] = [
     codigo: "BULL-90K",
     nombre: "Bull 90K",
     grupo: "HOMBRES",
-    requisito: "El recorrido largo: 90 km. Edad libre.",
+    // El 90 es de kilos, no de kilómetros: es una categoría de peso y el
+    // pesaje se hace al terminar, no al inscribirse.
+    requisito:
+      "90 kilos obligatorios al finalizar las dos etapas de competencia.",
     precio: PRECIO_INSCRIPCION,
-    km: 90,
   },
   {
     codigo: "PAREJAS-HOMBRES",
@@ -275,8 +277,10 @@ export function categoriaPorCodigo(codigo: string): Categoria | undefined {
 }
 
 /**
- * Km y desnivel son opcionales: el reglamento solo publica la distancia de
- * Bull 90K. Donde no hay dato, no se muestra la línea.
+ * Km y desnivel son opcionales y hoy no los trae ninguna categoría: el
+ * reglamento todavía no publica las distancias. Donde no hay dato, no se
+ * muestra la línea — antes se creyó que el 90 de Bull eran kilómetros y son
+ * kilos de peso del ciclista.
  */
 export function recorridoDe(categoria?: {
   km?: number;

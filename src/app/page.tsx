@@ -10,7 +10,6 @@ import {
   FECHA_LIMITE_ABONOS,
   GRUPOS,
   MAX_ABONOS,
-  NOMBRE_COMPLETO,
   PRECIO_INSCRIPCION,
   categoriasDeGrupo,
   recorridoDe,
@@ -26,29 +25,6 @@ const CINTA = [
   `HASTA ${MAX_ABONOS} ABONOS`,
 ];
 
-const CARTELES = [
-  {
-    src: "/fotos/apertura.jpg",
-    w: 1080,
-    h: 1350,
-    alt: `Cartel de apertura de inscripciones: ${pesos(PRECIO_INSCRIPCION)}, 150 cupos disponibles, apertura el 3 de septiembre`,
-    pie: "Apertura de inscripciones",
-  },
-  {
-    src: "/fotos/cartel-post.jpg",
-    w: 1080,
-    h: 1350,
-    alt: `Cartel de ${NOMBRE_COMPLETO} con la fecha de la carrera`,
-    pie: `${EVENTO.fechaLegible}`,
-  },
-  {
-    src: "/fotos/cartel-historia.jpg",
-    w: 1080,
-    h: 1920,
-    alt: `Cartel vertical de ${NOMBRE_COMPLETO} para compartir en historias`,
-    pie: "Para compartir en historias",
-  },
-];
 
 export default function Inicio() {
   // Los nombres de los destinos de recaudo salen del catálogo, que aquí corre
@@ -100,10 +76,10 @@ export default function Inicio() {
 
           <figure className="tinta animate-rise overflow-hidden rounded-[22px] bg-nube [--rise-rot:1deg]">
             <Image
-              src="/fotos/pareja-canon.jpg"
-              alt="Dos ciclistas subiendo por la carretera del cañón durante una edición anterior de Santander Xtreme"
-              width={1333}
-              height={2000}
+              src="/fotos/ciclista-barichara.jpg"
+              alt="Ciclista con el maillot de Barichara antes de salir a rodar"
+              width={1200}
+              height={1600}
               priority
               sizes="(max-width: 1024px) 100vw, 46vw"
               className="h-[clamp(20rem,52vw,32rem)] w-full object-cover object-[center_28%]"
@@ -146,36 +122,50 @@ export default function Inicio() {
           <TituloSeccion
             eyebrow="El cartel"
             titulo="La convocatoria."
-            bajada="Las piezas oficiales del evento, tal como circulan por redes. Guárdalas o compártelas para invitar a tu grupo."
+            bajada={`${pesos(PRECIO_INSCRIPCION)} por las ${EVENTO.etapas} etapas. Guarda el cartel o compártelo para invitar a tu grupo.`}
           />
 
-          <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {CARTELES.map((c, i) => (
-              <figure
-                key={c.src}
-                className="tinta animate-rise overflow-hidden rounded-[18px] bg-nube"
-                style={{
-                  // Cada uno cae con un retardo distinto y una inclinación
-                  // mínima: parecen calcomanías pegadas a mano, no una tabla.
-                  animationDelay: `${i * 0.09}s`,
-                  ["--rise-rot" as string]: i % 2 === 0 ? "-0.8deg" : "0.8deg",
-                }}
-              >
-                <Image
-                  src={c.src}
-                  alt={c.alt}
-                  width={c.w}
-                  height={c.h}
-                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                  className="h-auto w-full"
-                />
-                <figcaption className="border-t-[3px] border-tinta px-4 py-2.5">
-                  <p className="raya-mono text-[0.66rem] font-bold uppercase tracking-[0.14em] text-tinta/75">
-                    {c.pie}
-                  </p>
-                </figcaption>
-              </figure>
-            ))}
+          <div className="mt-10 grid grid-cols-1 items-start gap-6 sm:grid-cols-2">
+            <figure className="tinta animate-rise overflow-hidden rounded-[18px] bg-nube [--rise-rot:-0.8deg]">
+              <Image
+                src="/fotos/apertura.jpg"
+                alt={`Cartel de apertura de inscripciones: ${pesos(PRECIO_INSCRIPCION)} y 150 cupos disponibles`}
+                width={1080}
+                height={1350}
+                sizes="(max-width: 640px) 100vw, 50vw"
+                className="h-auto w-full"
+              />
+              <figcaption className="border-t-[3px] border-tinta px-4 py-2.5">
+                <p className="raya-mono text-[0.66rem] font-bold uppercase tracking-[0.14em] text-tinta/75">
+                  Apertura de inscripciones
+                </p>
+              </figcaption>
+            </figure>
+
+            {/*
+              La foto de carrera hace de contrapeso al cartel: uno dice cuánto
+              cuesta, la otra por qué vale la pena.
+            */}
+            <figure
+              className="tinta animate-rise overflow-hidden rounded-[18px] bg-nube [--rise-rot:0.8deg]"
+              style={{ animationDelay: "0.09s" }}
+            >
+              <Image
+                src="/fotos/pareja-canon.jpg"
+                alt={`Dos ciclistas subiendo por la carretera del cañón en una edición anterior de ${EVENTO.nombre}`}
+                width={1333}
+                height={2000}
+                sizes="(max-width: 640px) 100vw, 50vw"
+                // El cartel no se puede recortar porque lleva texto hasta el
+                // borde; la foto sí, así las dos quedan a la misma altura.
+                className="aspect-[4/5] w-full object-cover object-[center_35%]"
+              />
+              <figcaption className="border-t-[3px] border-tinta bg-rio px-4 py-2.5">
+                <p className="raya-mono text-[0.66rem] font-bold uppercase tracking-[0.14em] text-nube">
+                  El pueblo más lindo de Colombia
+                </p>
+              </figcaption>
+            </figure>
           </div>
         </section>
 

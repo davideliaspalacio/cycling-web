@@ -9,6 +9,9 @@ import { Cesion } from "./cesion";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
+  // Datos personales: fuera de los buscadores, además del robots.txt.
+  robots: { index: false, follow: false },
+
   title: `Cambio de competidor — ${NOMBRE_COMPLETO}`,
 };
 

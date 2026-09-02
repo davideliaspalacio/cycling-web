@@ -2,7 +2,10 @@ import { Suspense } from "react";
 import { EntrarAlPanel } from "@/components/entrar-al-panel";
 import { NOMBRE_COMPLETO } from "@/lib/catalogo";
 
-export const metadata = { title: `Entrar — ${NOMBRE_COMPLETO}` };
+export const metadata = {
+  // Datos personales: fuera de los buscadores, además del robots.txt.
+  robots: { index: false, follow: false },
+ title: `Entrar — ${NOMBRE_COMPLETO}` };
 
 export default function Entrar() {
   return (

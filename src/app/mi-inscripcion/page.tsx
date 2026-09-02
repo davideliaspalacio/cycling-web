@@ -18,6 +18,9 @@ import type { Abono, Inscripcion } from "@/lib/tipos";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
+  // Datos personales: fuera de los buscadores, además del robots.txt.
+  robots: { index: false, follow: false },
+
   title: `Mi inscripción — ${NOMBRE_COMPLETO}`,
 };
 

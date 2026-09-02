@@ -7,7 +7,10 @@ import { NOMBRE_COMPLETO } from "@/lib/catalogo";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: `Correos enviados — ${NOMBRE_COMPLETO}` };
+export const metadata = {
+  // Datos personales: fuera de los buscadores, además del robots.txt.
+  robots: { index: false, follow: false },
+ title: `Correos enviados — ${NOMBRE_COMPLETO}` };
 
 /**
  * El color dice qué clase de correo es de un vistazo: turquesa lo que confirma

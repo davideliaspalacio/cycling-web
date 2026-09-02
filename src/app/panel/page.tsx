@@ -11,6 +11,9 @@ import { Salir } from "./salir";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
+  // Datos personales: fuera de los buscadores, además del robots.txt.
+  robots: { index: false, follow: false },
+
   title: `Panel de la organización — ${NOMBRE_COMPLETO}`,
 };
 

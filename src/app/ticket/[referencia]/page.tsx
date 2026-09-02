@@ -53,6 +53,12 @@ async function saldoDe(ins: Inscripcion): Promise<number> {
   return resumen.saldo;
 }
 
+/**
+ * Un ticket lleva el nombre, la ciudad y el dorsal de una persona. Nunca
+ * debe aparecer en una búsqueda, aunque su referencia sea difícil de adivinar.
+ */
+export const metadata = { robots: { index: false, follow: false } };
+
 export default async function PaginaTicket({
   params,
 }: PageProps<"/ticket/[referencia]">) {

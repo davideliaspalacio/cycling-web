@@ -28,6 +28,9 @@ import { Revisar } from "./revisar";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
+  // Datos personales: fuera de los buscadores, además del robots.txt.
+  robots: { index: false, follow: false },
+
   title: `Comprobantes por revisar — ${NOMBRE_COMPLETO}`,
 };
 

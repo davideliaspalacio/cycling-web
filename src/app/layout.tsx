@@ -1,5 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { EVENTO, NOMBRE_COMPLETO } from "@/lib/catalogo";
+import {
+  CATEGORIAS,
+  EVENTO,
+  NOMBRE_COMPLETO,
+  PRECIO_INSCRIPCION,
+} from "@/lib/catalogo";
+import { pesos } from "@/lib/dinero";
 import { Bricolage_Grotesque, Instrument_Sans, Space_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -23,9 +29,62 @@ const spaceMono = Space_Mono({
   display: "swap",
 });
 
+/**
+ * La URL pública tiene que ser absoluta para que las tarjetas de WhatsApp,
+ * Instagram y X resuelvan la imagen. Sin `metadataBase`, Next genera rutas
+ * relativas y la vista previa sale sin foto.
+ */
+const SITIO = new URL(
+  process.env.URL_PUBLICA ?? "https://www.santanderxtreme.com",
+);
+
+const DESCRIPCION =
+  `Maratón de montaña de ${EVENTO.etapas} etapas en ${EVENTO.lugar}, ` +
+  `${EVENTO.fechaLegible}. ${CATEGORIAS.length} categorías, ` +
+  `${pesos(PRECIO_INSCRIPCION)}. Inscríbete en cinco pasos y paga de una o ` +
+  `en dos cuotas.`;
+
 export const metadata: Metadata = {
-  title: `${NOMBRE_COMPLETO} — Inscripciones`,
-  description: `Maratón de montaña en ${EVENTO.lugar}. Escoge tu categoría, inscríbete en cinco pasos y paga de una o en cuatro cuotas.`,
+  metadataBase: SITIO,
+  title: {
+    default: `${NOMBRE_COMPLETO} — Inscripciones`,
+    // Las páginas internas solo ponen su nombre y heredan la marca.
+    template: `%s — ${NOMBRE_COMPLETO}`,
+  },
+  description: DESCRIPCION,
+  applicationName: NOMBRE_COMPLETO,
+  keywords: [
+    NOMBRE_COMPLETO,
+    "Santander Xtreme",
+    `${EVENTO.lugar}`,
+    "MTB",
+    "XCM",
+    "maratón de montaña",
+    "ciclismo de montaña Colombia",
+    "carrera MTB Santander",
+    `inscripciones ${EVENTO.anio}`,
+  ],
+  authors: [{ name: NOMBRE_COMPLETO }],
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    locale: "es_CO",
+    url: "/",
+    siteName: NOMBRE_COMPLETO,
+    title: `${NOMBRE_COMPLETO} · ${EVENTO.lema}`,
+    description: DESCRIPCION,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${NOMBRE_COMPLETO} · ${EVENTO.lema}`,
+    description: DESCRIPCION,
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, "max-image-preview": "large" },
+  },
+  formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {

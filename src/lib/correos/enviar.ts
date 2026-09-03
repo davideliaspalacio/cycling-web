@@ -22,7 +22,16 @@ import type { PlantillaCorreo } from "./plantillas";
  * producción eso sí es un fallo, y se marca como tal.
  */
 
-const API_KEY = process.env.ZEPTOMAIL_API_KEY;
+/*
+ * Zoho muestra el token en su panel ya con el prefijo ("Zoho-enczapikey
+ * wSsV..."), así que es normal pegarlo entero. Aquí se admite de las dos
+ * formas: con prefijo o sin él. Si no, el envío falla con un 401 que no
+ * explica nada y se pierde media tarde buscándolo.
+ */
+const API_KEY = process.env.ZEPTOMAIL_API_KEY?.replace(
+  /^\s*Zoho-enczapikey\s+/i,
+  "",
+).trim();
 /** Zoho separa centro de datos por región; la cuenta europea usa .eu */
 const API = process.env.ZEPTOMAIL_API_BASE ?? "https://api.zeptomail.com/v1.1/email";
 const RESPONDER_A = process.env.CORREO_RESPUESTA ?? EVENTO.correoContacto;

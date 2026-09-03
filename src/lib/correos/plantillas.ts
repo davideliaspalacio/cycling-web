@@ -56,14 +56,22 @@ function boton(texto: string, url: string, color = TURQUESA): string {
 }
 
 function barraProgreso(pagado: number, total: number): string {
-  const pct = Math.max(2, Math.min(100, Math.round((pagado / total) * 100)));
+  /*
+   * Dos porcentajes distintos a propósito. El de la barra tiene un mínimo
+   * visible para que no parezca rota; el del texto es el real. Antes se usaba
+   * el mismo para los dos y un correo con cero pagado decía "2% abonado" —
+   * afirmar de más sobre el dinero de alguien es la peor manera de ahorrarse
+   * un píxel.
+   */
+  const real = total > 0 ? Math.min(100, Math.round((pagado / total) * 100)) : 0;
+  const ancho = pagado > 0 ? Math.max(2, real) : 0;
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:3px solid ${TINTA};border-radius:99px;background:#dbe9f7;margin:6px 0 14px">
     <tr>
-      <td width="${pct}%" style="background:${TURQUESA};height:18px;border-radius:99px;font-size:0;line-height:0">&nbsp;</td>
+      <td width="${ancho}%" style="background:${TURQUESA};height:18px;border-radius:99px;font-size:0;line-height:0">&nbsp;</td>
       <td style="font-size:0;line-height:0">&nbsp;</td>
     </tr>
   </table>
-  <p style="margin:0;font-family:${MONO};font-size:13px;color:${GRIS}">${pct}% abonado · ${pesos(pagado)} de ${pesos(total)}</p>`;
+  <p style="margin:0;font-family:${MONO};font-size:13px;color:${GRIS}">${real}% abonado · ${pesos(pagado)} de ${pesos(total)}</p>`;
 }
 
 function filaDato(etiqueta: string, valor: string, resaltar = false): string {

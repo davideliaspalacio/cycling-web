@@ -235,7 +235,12 @@ function nombreDeCanal(abono: Abono): string {
 }
 
 function urlPortal(ins: Inscripcion): string {
-  const base = process.env.URL_PUBLICA ?? "http://localhost:3000";
+  /*
+   * El respaldo es el dominio real, no localhost: `URL_PUBLICA` no está puesta
+   * en producción y todos los enlaces de los correos apuntaban a la máquina de
+   * quien los generó. En un correo que ya salió, eso no se puede arreglar.
+   */
+  const base = process.env.URL_PUBLICA ?? "https://www.santanderxtreme.com";
   return `${base}/mi-inscripcion?ref=${ins.referencia}`;
 }
 

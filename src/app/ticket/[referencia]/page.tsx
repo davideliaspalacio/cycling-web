@@ -87,7 +87,12 @@ export default async function PaginaTicket({
     );
   }
 
-  const base = process.env.URL_PUBLICA ?? "http://localhost:3000";
+  /*
+   * El respaldo es el dominio real y no localhost: de aquí sale el código QR
+   * del ticket, que alguien escanea en la entrega de kits. Un QR impreso
+   * apuntando a localhost no se arregla después.
+   */
+  const base = process.env.URL_PUBLICA ?? "https://www.santanderxtreme.com";
   const qr = await QRCode.toString(`${base}/ticket/${ins.referencia}`, {
     type: "svg",
     margin: 0,

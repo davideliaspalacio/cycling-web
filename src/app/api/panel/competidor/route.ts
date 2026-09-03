@@ -10,10 +10,10 @@ import type { DatosCiclista } from "@/lib/tipos";
 /**
  * Ceder una inscripción a otra persona.
  *
- * OJO con el control de acceso: el matcher de `src/proxy.ts` cubre `/panel`,
- * `/correos` y `/api/evidencias`, pero **no** `/api/panel/*` — tiene que dejar
- * abierto `/api/panel/sesion` para poder entrar. Así que aquí la comprobación
- * de sesión no es defensa en profundidad: es la única que hay.
+ * Control de acceso: el matcher de `src/proxy.ts` cubre `/api/panel/:path+`
+ * (con `/api/panel/sesion` en su lista de rutas abiertas, que es por donde se
+ * entra). Esta comprobación es la segunda barrera: si alguien toca el matcher,
+ * la ruta no se queda abierta en silencio.
  *
  * Y como en la revisión de comprobantes, quién lo hizo sale de la sesión y
  * nunca del cuerpo: es lo que queda escrito en la bitácora del cupo.

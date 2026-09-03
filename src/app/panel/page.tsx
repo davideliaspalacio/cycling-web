@@ -134,6 +134,7 @@ export default async function Panel() {
 
         <nav className="mt-6 flex flex-wrap gap-x-6 gap-y-2">
           {[
+            ["/panel/exportar", "Bajar la lista de inscritos"],
             ["/panel/competidor", "Cambiar de competidor"],
             // "¿Le llegó?" es la pregunta que llega por WhatsApp; el visor de
             // HTML de /correos responde otra ("¿qué decía?") y va detrás.
@@ -161,7 +162,13 @@ export default async function Panel() {
             </p>
           </Tarjeta>
         ) : (
-          <div className="mt-8 overflow-x-auto">
+          <div className="mt-8">
+            <p className="mb-3 text-[0.88rem] leading-snug text-tinta/75">
+              Toca cualquier fila para ver la ficha completa del inscrito: sus
+              datos, su RH y su contacto de emergencia, sus tallas, sus
+              comprobantes y todo lo que le ha pasado a su cupo.
+            </p>
+            <div className="overflow-x-auto">
             <table className="w-full min-w-[860px] border-collapse text-left">
               <thead>
                 <tr className="border-b-[3px] border-tinta/20">
@@ -191,12 +198,21 @@ export default async function Panel() {
                   return (
                     <tr
                       key={i.id}
-                      className="border-b border-tinta/10 transition-colors hover:bg-nube/[0.04]"
+                      className="relative cursor-pointer border-b border-tinta/10 transition-colors hover:bg-nube/[0.04]"
                     >
                       <td className="py-3 pr-4">
+                        {/*
+                          El enlace es uno solo y cubre la fila entera con su
+                          `::after`: así se puede hacer clic en cualquier
+                          celda sin repetir el enlace ocho veces ni meter
+                          JavaScript de cliente en una tabla que se pinta en
+                          el servidor. La referencia sigue siendo el enlace de
+                          verdad, que es lo que leen el teclado y el lector de
+                          pantalla.
+                        */}
                         <Link
-                          href={`/mi-inscripcion?ref=${i.referencia}`}
-                          className="raya-mono text-[0.8rem] font-bold text-rio hover:underline"
+                          href={`/panel/inscrito/${i.referencia}`}
+                          className="raya-mono text-[0.8rem] font-bold text-rio after:absolute after:inset-0 after:content-[''] hover:underline"
                         >
                           {i.referencia}
                         </Link>
@@ -225,9 +241,11 @@ export default async function Panel() {
                         <Chip tono={TONO[i.estado]}>{TEXTO[i.estado]}</Chip>
                       </td>
                       <td className="py-3 pr-2">
+                        {/* Por encima del enlace que cubre la fila, o no se
+                            podría llegar a la cesión desde la tabla. */}
                         <Link
                           href={`/panel/competidor?q=${i.referencia}`}
-                          className="raya-mono text-[0.7rem] text-tinta/75 hover:text-rio hover:underline"
+                          className="raya-mono relative z-10 text-[0.7rem] text-tinta/75 hover:text-rio hover:underline"
                         >
                           Ceder
                         </Link>
@@ -237,6 +255,7 @@ export default async function Panel() {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </main>

@@ -43,6 +43,14 @@ export const config = {
      */
     "/api/evidencias/:path+",
     /*
+     * `/api/panel` es todo de la organización, empezando por la exportación,
+     * que entrega los datos personales de cientos de personas en un archivo.
+     * `:path+` no cambia nada para /api/panel/sesion: está en ABIERTAS porque
+     * es por donde se entra. Cada ruta vuelve a comprobar la sesión por su
+     * cuenta; esto es la primera barrera, no la única.
+     */
+    "/api/panel/:path+",
+    /*
      * Deliberadamente FUERA: /api/correos/webhook. Lo llama Zoho, no una
      * persona, así que no hay cookie que comprobar y un redirect al login lo
      * rompería — su propio formulario exige que la llamada no esté

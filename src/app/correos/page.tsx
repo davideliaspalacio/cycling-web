@@ -50,6 +50,15 @@ export default async function PaginaCorreos() {
           bajada="Cada movimiento de pago dispara un correo. Aquí queda el registro completo, con el HTML tal como lo ve en su bandeja."
         />
 
+        {/* Esta pantalla enseña qué decía el correo. Si la pregunta es si
+            llegó, la respuesta está en la otra. */}
+        <Link
+          href="/panel/correos"
+          className="mt-4 inline-block font-mono text-[0.72rem] font-bold uppercase tracking-[0.14em] text-rio hover:underline"
+        >
+          ¿Llegaron? Seguimiento de entrega →
+        </Link>
+
         {MODO_CORREO === "sin-configurar" && (
           <Tarjeta tono="alerta" className="mt-8 p-6">
             <p className="font-display text-lg font-extrabold text-nube">

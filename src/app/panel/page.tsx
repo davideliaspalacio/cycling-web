@@ -135,7 +135,10 @@ export default async function Panel() {
         <nav className="mt-6 flex flex-wrap gap-x-6 gap-y-2">
           {[
             ["/panel/competidor", "Cambiar de competidor"],
-            ["/correos", "Correos enviados"],
+            // "¿Le llegó?" es la pregunta que llega por WhatsApp; el visor de
+            // HTML de /correos responde otra ("¿qué decía?") y va detrás.
+            ["/panel/correos", "¿Llegaron los correos?"],
+            ["/correos", "Ver el HTML enviado"],
           ].map(([href, texto]) => (
             <Link
               key={href}

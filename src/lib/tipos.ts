@@ -188,7 +188,45 @@ export type Inscripcion = {
   eventos: { en: string; tipo: string; detalle: string }[];
 };
 
-export type CorreoEnviado = {
+/**
+ * Qué se sabe de la entrega de un correo, según lo que cuente el proveedor.
+ *
+ * SIN_CONFIRMAR es el estado honesto por defecto: el proveedor aceptó el
+ * correo y nadie ha dicho nada más. No es "entregado" — aceptar es meterlo en
+ * la cola de salida; entregar es que el servidor del ciclista lo reciba, y eso
+ * pasa después y solo lo sabemos por webhook.
+ *
+ * QUEJA es el "bucle de retroalimentación" de ZeptoMail: el ciclista le dio a
+ * "esto es spam". Llegó, pero conviene enterarse.
+ */
+export type EstadoEntrega =
+  | "SIN_CONFIRMAR"
+  | "ENTREGADO"
+  | "ABIERTO"
+  | "REBOTADO"
+  | "QUEJA";
+
+/**
+ * DURO: la dirección no existe (casi siempre, mal escrita).
+ * BLANDO: existe pero hoy no pudo recibir (buzón lleno, servidor caído).
+ */
+export type TipoRebote = "DURO" | "BLANDO";
+
+/** Lo que los webhooks van anotando sobre un correo ya enviado. */
+export type EntregaCorreo = {
+  estadoEntrega: EstadoEntrega;
+  entregadoEn?: string;
+  rebotadoEn?: string;
+  reboteTipo?: TipoRebote;
+  /** Tal cual lo manda el proveedor: "relaying-issue", "user-unknown"… */
+  reboteMotivo?: string;
+  /** La respuesta literal del servidor del destinatario. */
+  reboteDiagnostico?: string;
+  abiertoEn?: string;
+  quejaEn?: string;
+};
+
+export type CorreoEnviado = EntregaCorreo & {
   id: string;
   para: string;
   asunto: string;
@@ -205,5 +243,38 @@ export type CorreoEnviado = {
    */
   proveedor: "zeptomail" | "brevo" | "resend" | "simulacion" | "sin-configurar";
   proveedorId?: string;
+  /**
+   * El `request_id` que devuelve el envío en la raíz de la respuesta, que es
+   * por donde el webhook identifica el correo. Se guarda aparte de
+   * `proveedorId` (que trae el message_id cuando la respuesta lo incluye)
+   * porque no está confirmado que sean el mismo valor: guardar los dos cuesta
+   * una columna, no poder emparejar deja el seguimiento inservible.
+   */
+  proveedorRequestId?: string;
   referencia?: string;
+};
+
+/**
+ * Una fila del seguimiento de /panel/correos.
+ *
+ * Sin `html` a propósito: son cientos de correos de 20 KB cada uno y el
+ * listado no pinta ninguno. Para ver el HTML está /correos/[id].
+ */
+export type CorreoSeguido = Omit<CorreoEnviado, "html"> & {
+  /** Del ciclista al que se le mandó, cuando la referencia sigue existiendo. */
+  ciclista?: { nombres: string; apellidos: string; identificacion: string };
+};
+
+/** Las cifras de la cabecera de /panel/correos. */
+export type ResumenCorreos = {
+  total: number;
+  hoy: number;
+  entregados: number;
+  rebotados: number;
+  quejas: number;
+  sinConfirmar: number;
+  /** Guardados en producción sin llave del proveedor: nunca salieron. */
+  noSalieron: number;
+  /** De desarrollo: se renderizaron pero no se mandaron a nadie. */
+  simulados: number;
 };

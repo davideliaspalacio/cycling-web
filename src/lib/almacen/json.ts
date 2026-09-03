@@ -1,7 +1,14 @@
 import "server-only";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { Abono, CorreoEnviado, Inscripcion } from "../tipos";
+import type {
+  Abono,
+  CorreoEnviado,
+  CorreoSeguido,
+  EstadoEntrega,
+  Inscripcion,
+  ResumenCorreos,
+} from "../tipos";
 
 /**
  * Almacén en archivo JSON — el respaldo para cuando no hay DATABASE_URL.
@@ -249,4 +256,157 @@ export async function listarCorreos(): Promise<CorreoEnviado[]> {
 export async function correoPorId(id: string): Promise<CorreoEnviado | undefined> {
   const { registros } = await leer<CorreoEnviado>(ARCHIVO_CORREOS);
   return registros.find((c) => c.id === id);
+}
+
+/* ------------------------ Seguimiento de la entrega ----------------------- */
+//
+// Misma semántica que en `postgres.ts`, resuelta en memoria. Aquí no hay
+// concurrencia real que valga, pero las escrituras siguen pasando por `enFila`
+// para no perder un evento contra otro que llegue a la vez.
+
+/** Las filas viejas del archivo no tienen el campo: no confirmadas. */
+const entregaDe = (c: CorreoEnviado): EstadoEntrega =>
+  c.estadoEntrega ?? "SIN_CONFIRMAR";
+
+const RANGO: Record<EstadoEntrega, number> = {
+  SIN_CONFIRMAR: 0,
+  ENTREGADO: 1,
+  ABIERTO: 2,
+  QUEJA: 3,
+  REBOTADO: 4,
+};
+
+export async function correoDelProveedor(pistas: {
+  ids: string[];
+  destinatario?: string;
+  referencia?: string;
+}): Promise<{ id: string } | undefined> {
+  const { registros } = await leer<CorreoEnviado>(ARCHIVO_CORREOS);
+  const ids = new Set(pistas.ids.filter(Boolean));
+  const porId = registros.find(
+    (c) =>
+      ids.has(c.id) ||
+      (c.proveedorRequestId ? ids.has(c.proveedorRequestId) : false) ||
+      (c.proveedorId ? ids.has(c.proveedorId) : false),
+  );
+  if (porId) return { id: porId.id };
+
+  if (!pistas.destinatario) return undefined;
+  const destino = pistas.destinatario.toLowerCase();
+  const candidatos = registros
+    .filter(
+      (c) =>
+        c.para.toLowerCase() === destino &&
+        (!pistas.referencia || c.referencia === pistas.referencia),
+    )
+    .sort((a, b) => b.enviadoEn.localeCompare(a.enviadoEn));
+  return candidatos[0] ? { id: candidatos[0].id } : undefined;
+}
+
+export async function anotarEntrega(
+  id: string,
+  evento: {
+    estado: Exclude<EstadoEntrega, "SIN_CONFIRMAR">;
+    ocurridoEn: string;
+    reboteTipo?: "DURO" | "BLANDO";
+    reboteMotivo?: string;
+    reboteDiagnostico?: string;
+  },
+): Promise<boolean> {
+  return enFila(async () => {
+    const tabla = await leer<CorreoEnviado>(ARCHIVO_CORREOS);
+    const c = tabla.registros.find((r) => r.id === id);
+    if (!c) return false;
+
+    if (evento.estado === "ENTREGADO") c.entregadoEn ??= evento.ocurridoEn;
+    if (evento.estado === "ABIERTO") c.abiertoEn ??= evento.ocurridoEn;
+    if (evento.estado === "QUEJA") c.quejaEn ??= evento.ocurridoEn;
+    if (evento.estado === "REBOTADO") {
+      c.rebotadoEn = evento.ocurridoEn;
+      c.reboteTipo = evento.reboteTipo;
+      c.reboteMotivo = evento.reboteMotivo;
+      c.reboteDiagnostico = evento.reboteDiagnostico;
+    }
+    // Solo sube de rango: una entrega tardía no borra un rebote.
+    if (RANGO[evento.estado] > RANGO[entregaDe(c)]) c.estadoEntrega = evento.estado;
+
+    await escribir(ARCHIVO_CORREOS, tabla);
+    return true;
+  });
+}
+
+/** `html` fuera: el listado no lo pinta y aquí son cientos de KB en memoria. */
+function sinHtml(c: CorreoEnviado): Omit<CorreoEnviado, "html"> {
+  const copia: Record<string, unknown> = { ...c };
+  delete copia.html;
+  return copia as Omit<CorreoEnviado, "html">;
+}
+
+export async function seguimientoCorreos(params: {
+  q?: string;
+  estado?: EstadoEntrega;
+  limite?: number;
+} = {}): Promise<CorreoSeguido[]> {
+  const [{ registros }, inscripciones] = await Promise.all([
+    leer<CorreoEnviado>(ARCHIVO_CORREOS),
+    listarInscripciones(),
+  ]);
+  const porReferencia = new Map(inscripciones.map((i) => [i.referencia, i]));
+  const aguja = params.q?.trim().toLowerCase();
+
+  return registros
+    .map((c) => {
+      const ins = c.referencia ? porReferencia.get(c.referencia) : undefined;
+      return {
+        ...sinHtml(c),
+        estadoEntrega: entregaDe(c),
+        ciclista: ins
+          ? {
+              nombres: ins.ciclista.nombres,
+              apellidos: ins.ciclista.apellidos,
+              identificacion: ins.ciclista.identificacion,
+            }
+          : undefined,
+      } satisfies CorreoSeguido;
+    })
+    .filter((c) => {
+      if (params.estado && c.estadoEntrega !== params.estado) return false;
+      if (!aguja) return true;
+      const nombre = c.ciclista
+        ? `${c.ciclista.nombres} ${c.ciclista.apellidos}`.toLowerCase()
+        : "";
+      return (
+        c.para.toLowerCase().includes(aguja) ||
+        (c.referencia ?? "").toLowerCase().includes(aguja) ||
+        c.asunto.toLowerCase().includes(aguja) ||
+        nombre.includes(aguja) ||
+        (c.ciclista?.identificacion ?? "").includes(aguja)
+      );
+    })
+    .sort((a, b) => b.enviadoEn.localeCompare(a.enviadoEn))
+    .slice(0, params.limite ?? 200);
+}
+
+export async function resumenCorreos(desde: string): Promise<ResumenCorreos> {
+  const { registros } = await leer<CorreoEnviado>(ARCHIVO_CORREOS);
+  const cuenta = (fn: (c: CorreoEnviado) => boolean) =>
+    registros.filter(fn).length;
+  return {
+    total: registros.length,
+    hoy: cuenta((c) => c.enviadoEn >= desde),
+    // Abierto implica entregado: quien lo abrió, lo recibió.
+    entregados: cuenta((c) => ["ENTREGADO", "ABIERTO"].includes(entregaDe(c))),
+    rebotados: cuenta((c) => entregaDe(c) === "REBOTADO"),
+    quejas: cuenta((c) => entregaDe(c) === "QUEJA"),
+    // Un correo simulado o que nunca salió no está "sin confirmar": no hay
+    // nada que confirmar. Se cuentan aparte.
+    sinConfirmar: cuenta(
+      (c) =>
+        entregaDe(c) === "SIN_CONFIRMAR" &&
+        c.proveedor !== "sin-configurar" &&
+        c.proveedor !== "simulacion",
+    ),
+    noSalieron: cuenta((c) => c.proveedor === "sin-configurar"),
+    simulados: cuenta((c) => c.proveedor === "simulacion"),
+  };
 }

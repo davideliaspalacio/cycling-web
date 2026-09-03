@@ -156,3 +156,71 @@ CREATE TABLE IF NOT EXISTS correos (
 );
 
 CREATE INDEX IF NOT EXISTS correos_enviado_idx ON correos (enviado_en DESC);
+
+/* ---------------------- Entrega de los correos (webhooks) ------------------ */
+--
+-- Hasta aquí `correos` solo sabía que el correo se compuso y que el proveedor
+-- lo aceptó. Aceptado no es entregado: el rebote ocurre después, cuando el
+-- servidor del ciclista contesta. Eso llega por los webhooks de ZeptoMail
+-- (Mail Agent → Webhooks) y es lo que estas columnas guardan.
+--
+-- Mientras no haya webhook configurado se quedan en 'SIN_CONFIRMAR' y la
+-- pantalla lo dice con esas palabras. Nunca damos por entregado lo que nadie
+-- confirmó.
+
+ALTER TABLE correos
+  ADD COLUMN IF NOT EXISTS estado_entrega text NOT NULL DEFAULT 'SIN_CONFIRMAR';
+
+ALTER TABLE correos ADD COLUMN IF NOT EXISTS entregado_en       timestamptz;
+ALTER TABLE correos ADD COLUMN IF NOT EXISTS rebotado_en        timestamptz;
+-- DURO = la dirección no existe y no va a existir. BLANDO = hoy no se pudo.
+ALTER TABLE correos ADD COLUMN IF NOT EXISTS rebote_tipo        text;
+-- Tal como lo manda el proveedor ("relaying-issue", "user-unknown"…). La
+-- traducción a español llano se hace al pintar, no al guardar: si mañana Zoho
+-- estrena un motivo, aquí queda el original y no una etiqueta inventada.
+ALTER TABLE correos ADD COLUMN IF NOT EXISTS rebote_motivo      text;
+ALTER TABLE correos ADD COLUMN IF NOT EXISTS rebote_diagnostico text;
+ALTER TABLE correos ADD COLUMN IF NOT EXISTS abierto_en         timestamptz;
+-- Bucle de retroalimentación: el ciclista le dio a "esto es spam".
+ALTER TABLE correos ADD COLUMN IF NOT EXISTS queja_en           timestamptz;
+
+-- El webhook identifica el correo por `request_id`, que es lo que devuelve el
+-- envío en la raíz de la respuesta. `proveedor_id` guarda el message_id
+-- cuando la respuesta lo trae, y hasta tener un envío real con webhook activo
+-- no sabemos con certeza si son el mismo valor. Se guardan los dos por
+-- separado: cruzar de más es barato, no poder cruzar deja el seguimiento
+-- inservible para siempre.
+ALTER TABLE correos ADD COLUMN IF NOT EXISTS proveedor_request_id text;
+
+ALTER TABLE correos DROP CONSTRAINT IF EXISTS correos_estado_entrega_check;
+ALTER TABLE correos ADD CONSTRAINT correos_estado_entrega_check
+  CHECK (estado_entrega IN ('SIN_CONFIRMAR','ENTREGADO','ABIERTO','REBOTADO','QUEJA'));
+
+ALTER TABLE correos DROP CONSTRAINT IF EXISTS correos_rebote_tipo_check;
+ALTER TABLE correos ADD CONSTRAINT correos_rebote_tipo_check
+  CHECK (rebote_tipo IS NULL OR rebote_tipo IN ('DURO','BLANDO'));
+
+-- El receptor del webhook busca por aquí, y es el camino que tiene que ser
+-- rápido: llega una petición por evento y hay que contestar 200 enseguida.
+CREATE INDEX IF NOT EXISTS correos_proveedor_request_idx
+  ON correos (proveedor_request_id)
+  WHERE proveedor_request_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS correos_proveedor_id_idx
+  ON correos (proveedor_id)
+  WHERE proveedor_id IS NOT NULL;
+
+-- Respaldo del emparejamiento cuando el evento no trae identificador nuestro:
+-- destinatario (+ referencia) y el más reciente.
+CREATE INDEX IF NOT EXISTS correos_para_idx ON correos (lower(para), enviado_en DESC);
+CREATE INDEX IF NOT EXISTS correos_referencia_idx
+  ON correos (referencia) WHERE referencia IS NOT NULL;
+
+-- Las dos consultas de /panel/correos: el resumen de arriba y el filtro por
+-- estado del listado.
+CREATE INDEX IF NOT EXISTS correos_estado_entrega_idx
+  ON correos (estado_entrega, enviado_en DESC);
+
+-- Los rebotes son lo que dispara trabajo humano: se listan solos y a menudo.
+CREATE INDEX IF NOT EXISTS correos_rebotados_idx
+  ON correos (rebotado_en DESC) WHERE rebotado_en IS NOT NULL;

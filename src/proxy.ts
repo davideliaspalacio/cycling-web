@@ -42,5 +42,13 @@ export const config = {
      * por donde el ciclista sube el suyo sin estar autenticado.
      */
     "/api/evidencias/:path+",
+    /*
+     * Deliberadamente FUERA: /api/correos/webhook. Lo llama Zoho, no una
+     * persona, así que no hay cookie que comprobar y un redirect al login lo
+     * rompería — su propio formulario exige que la llamada no esté
+     * autenticada. Esa ruta se protege sola, con el par cabecera/valor que
+     * ofrece ZeptoMail (X-Webhook-Clave contra ZEPTOMAIL_WEBHOOK_SECRETO).
+     * No la metas aquí "por seguridad": la dejarías inservible.
+     */
   ],
 };

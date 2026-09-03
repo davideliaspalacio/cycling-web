@@ -1,7 +1,16 @@
 import "server-only";
 import type { PoolClient } from "pg";
 import { consultar, enTransaccion } from "../db";
-import type { Abono, CorreoEnviado, Cuota, Inscripcion } from "../tipos";
+import type {
+  Abono,
+  CorreoEnviado,
+  CorreoSeguido,
+  Cuota,
+  EntregaCorreo,
+  EstadoEntrega,
+  Inscripcion,
+  ResumenCorreos,
+} from "../tipos";
 
 /**
  * Almacén en Postgres. Es la implementación de producción.
@@ -494,8 +503,9 @@ export async function resolverAbono(params: {
 export async function registrarCorreo(correo: CorreoEnviado): Promise<void> {
   await consultar(
     `INSERT INTO correos (
-       id, para, asunto, plantilla, html, enviado_en, proveedor, proveedor_id, referencia
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       id, para, asunto, plantilla, html, enviado_en, proveedor, proveedor_id,
+       proveedor_request_id, referencia
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
      ON CONFLICT (id) DO NOTHING`,
     [
       correo.id,
@@ -506,12 +516,24 @@ export async function registrarCorreo(correo: CorreoEnviado): Promise<void> {
       correo.enviadoEn,
       correo.proveedor,
       correo.proveedorId ?? null,
+      correo.proveedorRequestId ?? null,
       correo.referencia ?? null,
     ],
   );
 }
 
-type FilaCorreo = {
+type FilaEntrega = {
+  estado_entrega: string;
+  entregado_en: Date | null;
+  rebotado_en: Date | null;
+  rebote_tipo: string | null;
+  rebote_motivo: string | null;
+  rebote_diagnostico: string | null;
+  abierto_en: Date | null;
+  queja_en: Date | null;
+};
+
+type FilaCorreo = FilaEntrega & {
   id: string;
   para: string;
   asunto: string;
@@ -520,10 +542,23 @@ type FilaCorreo = {
   enviado_en: Date;
   proveedor: string;
   proveedor_id: string | null;
+  proveedor_request_id: string | null;
   referencia: string | null;
 };
 
+const aEntrega = (f: FilaEntrega): EntregaCorreo => ({
+  estadoEntrega: (f.estado_entrega ?? "SIN_CONFIRMAR") as EstadoEntrega,
+  entregadoEn: f.entregado_en?.toISOString(),
+  rebotadoEn: f.rebotado_en?.toISOString(),
+  reboteTipo: (f.rebote_tipo ?? undefined) as EntregaCorreo["reboteTipo"],
+  reboteMotivo: f.rebote_motivo ?? undefined,
+  reboteDiagnostico: f.rebote_diagnostico ?? undefined,
+  abiertoEn: f.abierto_en?.toISOString(),
+  quejaEn: f.queja_en?.toISOString(),
+});
+
 const aCorreo = (f: FilaCorreo): CorreoEnviado => ({
+  ...aEntrega(f),
   id: f.id,
   para: f.para,
   asunto: f.asunto,
@@ -532,6 +567,7 @@ const aCorreo = (f: FilaCorreo): CorreoEnviado => ({
   enviadoEn: f.enviado_en.toISOString(),
   proveedor: f.proveedor as CorreoEnviado["proveedor"],
   proveedorId: f.proveedor_id ?? undefined,
+  proveedorRequestId: f.proveedor_request_id ?? undefined,
   referencia: f.referencia ?? undefined,
 });
 
@@ -550,4 +586,218 @@ export async function correoPorId(
     [id],
   );
   return filas[0] ? aCorreo(filas[0]) : undefined;
+}
+
+/* ------------------------ Seguimiento de la entrega ----------------------- */
+
+/**
+ * Busca a qué correo se refiere un evento del proveedor.
+ *
+ * Se prueban varias llaves porque el webhook de ZeptoMail identifica el correo
+ * por `request_id` y no está confirmado que ese valor sea el mismo que el
+ * `message_id` que devuelve el envío. Guardamos los dos (`proveedor_request_id`
+ * y `proveedor_id`) y aquí se aceptan ambos, más el id nuestro por si el
+ * evento devuelve el `client_reference`.
+ *
+ * El respaldo por destinatario es deliberadamente lo último y exige correo:
+ * empareja con el envío más reciente a esa dirección. No es exacto, pero si una
+ * dirección rebota rebotan todos sus correos, así que el error posible es
+ * señalar la fila vecina, no inventar un rebote.
+ */
+export async function correoDelProveedor(pistas: {
+  /** request_id, message_id, client_reference… lo que traiga el evento. */
+  ids: string[];
+  destinatario?: string;
+  referencia?: string;
+}): Promise<{ id: string } | undefined> {
+  const ids = pistas.ids.filter(Boolean);
+  if (ids.length > 0) {
+    const filas = await consultar<{ id: string }>(
+      `SELECT id FROM correos
+        WHERE proveedor_request_id = ANY($1::text[])
+           OR proveedor_id = ANY($1::text[])
+           OR id::text = ANY($1::text[])
+        ORDER BY enviado_en DESC
+        LIMIT 1`,
+      [ids],
+    );
+    if (filas[0]) return filas[0];
+  }
+
+  if (!pistas.destinatario) return undefined;
+  const filas = await consultar<{ id: string }>(
+    `SELECT id FROM correos
+      WHERE lower(para) = lower($1)
+        AND ($2::text IS NULL OR referencia = $2)
+      ORDER BY enviado_en DESC
+      LIMIT 1`,
+    [pistas.destinatario, pistas.referencia ?? null],
+  );
+  return filas[0];
+}
+
+const RANGO_ESTADO = `CASE estado_entrega
+     WHEN 'ENTREGADO' THEN 1
+     WHEN 'ABIERTO'   THEN 2
+     WHEN 'QUEJA'     THEN 3
+     WHEN 'REBOTADO'  THEN 4
+     ELSE 0 END`;
+
+/**
+ * Anota un evento de entrega sobre un correo ya enviado.
+ *
+ * Un mismo correo recibe varios eventos —entregado y después marcado como
+ * spam— y pueden llegar desordenados, así que `estado_entrega` solo sube de
+ * rango y nunca baja: una entrega tardía no puede borrar un rebote. Las marcas
+ * de tiempo se guardan por separado, así que aunque el estado se quede en el
+ * más grave sigue constando cuándo pasó cada cosa.
+ */
+export async function anotarEntrega(
+  id: string,
+  evento: {
+    estado: Exclude<EstadoEntrega, "SIN_CONFIRMAR">;
+    ocurridoEn: string;
+    reboteTipo?: "DURO" | "BLANDO";
+    reboteMotivo?: string;
+    reboteDiagnostico?: string;
+  },
+): Promise<boolean> {
+  const rango =
+    { ENTREGADO: 1, ABIERTO: 2, QUEJA: 3, REBOTADO: 4 }[evento.estado] ?? 0;
+  const filas = await consultar<{ id: string }>(
+    `UPDATE correos SET
+       entregado_en = CASE WHEN $2 = 'ENTREGADO'
+         THEN COALESCE(entregado_en, $3::timestamptz) ELSE entregado_en END,
+       abierto_en = CASE WHEN $2 = 'ABIERTO'
+         THEN COALESCE(abierto_en, $3::timestamptz) ELSE abierto_en END,
+       queja_en = CASE WHEN $2 = 'QUEJA'
+         THEN COALESCE(queja_en, $3::timestamptz) ELSE queja_en END,
+       -- Del rebote sí gana el último: si vuelve a rebotar, el motivo vigente
+       -- es el nuevo, que es el que hay que enseñarle a quien atiende.
+       rebotado_en = CASE WHEN $2 = 'REBOTADO' THEN $3::timestamptz ELSE rebotado_en END,
+       rebote_tipo = CASE WHEN $2 = 'REBOTADO' THEN $4 ELSE rebote_tipo END,
+       rebote_motivo = CASE WHEN $2 = 'REBOTADO' THEN $5 ELSE rebote_motivo END,
+       rebote_diagnostico = CASE WHEN $2 = 'REBOTADO' THEN $6 ELSE rebote_diagnostico END,
+       estado_entrega = CASE WHEN $7::int > (${RANGO_ESTADO})
+         THEN $2 ELSE estado_entrega END
+     WHERE id = $1
+     RETURNING id`,
+    [
+      id,
+      evento.estado,
+      evento.ocurridoEn,
+      evento.reboteTipo ?? null,
+      evento.reboteMotivo ?? null,
+      evento.reboteDiagnostico ?? null,
+      rango,
+    ],
+  );
+  return filas.length > 0;
+}
+
+type FilaSeguida = FilaCorreo & {
+  nombres: string | null;
+  apellidos: string | null;
+  identificacion: string | null;
+};
+
+const aSeguido = (f: FilaSeguida): CorreoSeguido => ({
+  ...aEntrega(f),
+  id: f.id,
+  para: f.para,
+  asunto: f.asunto,
+  plantilla: f.plantilla,
+  enviadoEn: f.enviado_en.toISOString(),
+  proveedor: f.proveedor as CorreoEnviado["proveedor"],
+  proveedorId: f.proveedor_id ?? undefined,
+  proveedorRequestId: f.proveedor_request_id ?? undefined,
+  referencia: f.referencia ?? undefined,
+  ciclista: f.nombres
+    ? {
+        nombres: f.nombres,
+        apellidos: f.apellidos ?? "",
+        identificacion: f.identificacion ?? "",
+      }
+    : undefined,
+});
+
+/**
+ * El listado de /panel/correos: quién, qué correo, cuándo y si llegó.
+ *
+ * El nombre del ciclista no vive en `correos`, así que se cruza por
+ * `referencia` con `inscripciones` (que la tiene UNIQUE, o sea uno a uno). Es
+ * LEFT JOIN a propósito: un correo cuya inscripción se borró sigue existiendo
+ * y hay que poder verlo.
+ *
+ * El HTML se queda fuera de la lista: son cientos de correos de decenas de KB
+ * y aquí no se pinta ninguno. Para eso está /correos/[id].
+ *
+ * La búsqueda es LIKE sin índice a sabiendas: son cientos de filas, no
+ * millones, y montar búsqueda de texto completo para eso sería peor negocio.
+ */
+export async function seguimientoCorreos(params: {
+  q?: string;
+  estado?: EstadoEntrega;
+  limite?: number;
+} = {}): Promise<CorreoSeguido[]> {
+  const aguja = params.q?.trim().toLowerCase();
+  const filas = await consultar<FilaSeguida>(
+    `SELECT c.*,
+            i.ciclista ->> 'nombres'        AS nombres,
+            i.ciclista ->> 'apellidos'      AS apellidos,
+            i.ciclista ->> 'identificacion' AS identificacion
+       FROM correos c
+       LEFT JOIN inscripciones i ON i.referencia = c.referencia
+      WHERE ($1::text IS NULL OR (
+              lower(c.para) LIKE $1
+           OR lower(coalesce(c.referencia, '')) LIKE $1
+           OR lower(c.asunto) LIKE $1
+           OR lower(coalesce(i.ciclista ->> 'nombres', '') || ' ' ||
+                    coalesce(i.ciclista ->> 'apellidos', '')) LIKE $1
+           OR coalesce(i.ciclista ->> 'identificacion', '') LIKE $1
+            ))
+        AND ($2::text IS NULL OR c.estado_entrega = $2)
+      ORDER BY c.enviado_en DESC
+      LIMIT $3`,
+    [aguja ? `%${aguja}%` : null, params.estado ?? null, params.limite ?? 200],
+  );
+  return filas.map(aSeguido);
+}
+
+/**
+ * Las cifras de la cabecera. `desde` es el arranque del día en Colombia y lo
+ * calcula quien llama, para que Postgres y el almacén JSON cuenten lo mismo.
+ */
+export async function resumenCorreos(desde: string): Promise<ResumenCorreos> {
+  const filas = await consultar<Record<string, string>>(
+    `SELECT
+       count(*)                                                   AS total,
+       count(*) FILTER (WHERE enviado_en >= $1::timestamptz)       AS hoy,
+       -- Abierto implica entregado: quien lo abrió, lo recibió.
+       count(*) FILTER (WHERE estado_entrega IN ('ENTREGADO','ABIERTO')) AS entregados,
+       count(*) FILTER (WHERE estado_entrega = 'REBOTADO')         AS rebotados,
+       count(*) FILTER (WHERE estado_entrega = 'QUEJA')            AS quejas,
+       -- Un correo simulado o que nunca salió no está "sin confirmar": no hay
+       -- nada que confirmar. Se cuentan aparte para que la cifra de arriba
+       -- diga lo mismo que las filas de abajo.
+       count(*) FILTER (WHERE estado_entrega = 'SIN_CONFIRMAR'
+                          AND proveedor NOT IN ('sin-configurar','simulacion'))
+                                                                   AS sin_confirmar,
+       count(*) FILTER (WHERE proveedor = 'sin-configurar')        AS no_salieron,
+       count(*) FILTER (WHERE proveedor = 'simulacion')            AS simulados
+     FROM correos`,
+    [desde],
+  );
+  const f = filas[0] ?? {};
+  const n = (k: string) => Number(f[k] ?? 0);
+  return {
+    total: n("total"),
+    hoy: n("hoy"),
+    entregados: n("entregados"),
+    rebotados: n("rebotados"),
+    quejas: n("quejas"),
+    sinConfirmar: n("sin_confirmar"),
+    noSalieron: n("no_salieron"),
+    simulados: n("simulados"),
+  };
 }

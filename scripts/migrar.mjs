@@ -140,14 +140,27 @@ try {
 
     let correosNuevos = 0;
     for (const c of correos) {
+      // Las columnas de entrega van aquí también: son lo que dijo el
+      // proveedor sobre correos ya enviados y no se pueden volver a pedir.
+      // Un volcado anterior al seguimiento no las trae y quedan sin confirmar,
+      // que es exactamente lo que se sabe de ellas.
       const { rowCount } = await pool.query(
         `INSERT INTO correos (
-           id, para, asunto, plantilla, html, enviado_en, proveedor, proveedor_id, referencia
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+           id, para, asunto, plantilla, html, enviado_en, proveedor, proveedor_id,
+           proveedor_request_id, referencia, estado_entrega, entregado_en,
+           rebotado_en, rebote_tipo, rebote_motivo, rebote_diagnostico,
+           abierto_en, queja_en
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
          ON CONFLICT (id) DO NOTHING`,
         [
           c.id, c.para, c.asunto, c.plantilla, c.html, c.enviadoEn,
-          c.proveedor, c.proveedorId ?? null, c.referencia ?? null,
+          c.proveedor, c.proveedorId ?? null, c.proveedorRequestId ?? null,
+          c.referencia ?? null,
+          c.estadoEntrega ?? "SIN_CONFIRMAR",
+          c.entregadoEn ?? null, c.rebotadoEn ?? null,
+          c.reboteTipo ?? null, c.reboteMotivo ?? null,
+          c.reboteDiagnostico ?? null,
+          c.abiertoEn ?? null, c.quejaEn ?? null,
         ],
       );
       correosNuevos += rowCount;
@@ -169,6 +182,7 @@ try {
       (SELECT count(*) FROM abonos)        AS abonos,
       (SELECT count(*) FROM abonos WHERE estado IN ('ENVIADA','EN_REVISION')) AS por_revisar,
       (SELECT count(*) FROM correos)       AS correos,
+      (SELECT count(*) FROM correos WHERE estado_entrega = 'REBOTADO') AS rebotados,
       (SELECT coalesce(sum(pagado), 0) FROM inscripciones) AS recaudado
   `);
   const r = rows[0];
@@ -177,6 +191,9 @@ try {
       `\n  recaudado: $${Number(r.recaudado).toLocaleString("es-CO")}` +
       (Number(r.por_revisar) > 0
         ? `\n  ${r.por_revisar} comprobantes esperando revisión`
+        : "") +
+      (Number(r.rebotados) > 0
+        ? `\n  ${r.rebotados} correos rebotados (ver /panel/correos)`
         : ""),
   );
 } finally {

@@ -52,3 +52,9 @@ export const resolverAbono = impl.resolverAbono;
 export const registrarCorreo = impl.registrarCorreo;
 export const listarCorreos = impl.listarCorreos;
 export const correoPorId = impl.correoPorId;
+// Seguimiento de entrega: lo que los webhooks del proveedor van anotando
+// encima de un correo ya enviado, y lo que /panel/correos lee de ahí.
+export const correoDelProveedor = impl.correoDelProveedor;
+export const anotarEntrega = impl.anotarEntrega;
+export const seguimientoCorreos = impl.seguimientoCorreos;
+export const resumenCorreos = impl.resumenCorreos;

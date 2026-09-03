@@ -28,8 +28,13 @@ function firmar(datos: string): string {
   return createHmac("sha256", secreto()).update(datos).digest("base64url");
 }
 
-/** Comparación en tiempo constante: una comparación normal filtra la clave. */
-function igualSinFiltrar(a: string, b: string): boolean {
+/**
+ * Comparación en tiempo constante: una comparación normal filtra la clave.
+ *
+ * Exportada porque el receptor del webhook de correos compara su propio
+ * secreto y tiene exactamente el mismo problema.
+ */
+export function igualSinFiltrar(a: string, b: string): boolean {
   const ba = Buffer.from(a);
   const bb = Buffer.from(b);
   if (ba.length !== bb.length) return false;

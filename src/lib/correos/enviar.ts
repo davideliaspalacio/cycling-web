@@ -89,6 +89,7 @@ export async function enviarCorreo(params: {
 }): Promise<{ id: string; proveedor: typeof MODO_CORREO }> {
   const id = randomUUID();
   let proveedorId: string | undefined;
+  let proveedorRequestId: string | undefined;
 
   if (API_KEY) {
     const respuesta = await fetch(API, {
@@ -106,8 +107,13 @@ export async function enviarCorreo(params: {
         subject: params.contenido.asunto,
         htmlbody: params.contenido.html,
         textbody: params.contenido.texto,
-        // Vuelve en los informes y en los webhooks de rebote.
-        client_reference: params.referencia ?? id,
+        // Vuelve tal cual en los webhooks (event_message[].email_info.
+        // client_reference), y es por donde se empareja el evento con la fila
+        // de `correos`. Por eso manda el id del correo y no la referencia de
+        // la inscripción: una inscripción genera muchos correos y con la
+        // referencia sola no se sabría en cuál marcar el rebote. La referencia
+        // viaja detrás para que los informes de Zoho sigan siendo legibles.
+        client_reference: params.referencia ? `${id}·${params.referencia}` : id,
       }),
     });
 
@@ -125,6 +131,10 @@ export async function enviarCorreo(params: {
       data?: { message_id?: string }[];
     };
     proveedorId = cuerpo.data?.[0]?.message_id ?? cuerpo.request_id;
+    // Aparte del anterior: el webhook trae `request_id` y `email_reference`, y
+    // no está comprobado que coincidan con el message_id. Guardar los dos
+    // cuesta una columna; no poder emparejar dejaría el seguimiento inútil.
+    proveedorRequestId = cuerpo.request_id;
   }
 
   await registrarCorreo({
@@ -136,7 +146,10 @@ export async function enviarCorreo(params: {
     enviadoEn: new Date().toISOString(),
     proveedor: MODO_CORREO,
     proveedorId,
+    proveedorRequestId,
     referencia: params.referencia,
+    // Nadie ha dicho todavía que haya llegado, y aceptado no es entregado.
+    estadoEntrega: "SIN_CONFIRMAR",
   });
 
   return { id, proveedor: MODO_CORREO };

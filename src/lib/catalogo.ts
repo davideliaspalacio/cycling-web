@@ -108,6 +108,13 @@ export type CuentaRecaudo = {
   tipo: string;
   numero: string;
   titular: string;
+  /**
+   * Código QR de la organización, si lo hay. Escanearlo evita el error más
+   * caro del pago manual: transcribir mal un dígito de la cuenta.
+   */
+  qr?: string;
+  /** Una línea de cómo se paga por aquí, para que la tarjeta no quede muda. */
+  como: string;
 };
 
 /**
@@ -124,11 +131,19 @@ export type CuentaRecaudo = {
  * desde un componente de servidor; leerlo dentro de un componente de cliente
  * daría un valor en el servidor y otro en el navegador.
  */
+/*
+ * El nombre que el ciclista va a ver en su banco al confirmar la
+ * transferencia. Tiene que ser el del titular real de la cuenta: si la página
+ * dice una cosa y el banco muestra otra, la transferencia parece una estafa y
+ * la gente no la completa.
+ */
 export const TITULAR_RECAUDO =
-  process.env.RECAUDO_TITULAR ?? `${EVENTO.nombre} ${EVENTO.anio}`;
+  process.env.RECAUDO_TITULAR ?? "Carlos Eduardo Burgos Prada";
 
 const CUENTA_BANCOLOMBIA = process.env.RECAUDO_BANCOLOMBIA ?? "32200001101";
 const CELULAR_RECAUDO = process.env.RECAUDO_CELULAR ?? "3106651613";
+/** La llave Bre-B de la cuenta Bancolombia es un alias, no el celular. */
+const LLAVE_BRE_B = process.env.RECAUDO_LLAVE_BRE_B ?? "@santanderxtreme";
 
 export const CUENTAS_RECAUDO: CuentaRecaudo[] = [
   {
@@ -137,6 +152,7 @@ export const CUENTAS_RECAUDO: CuentaRecaudo[] = [
     tipo: "Cuenta de ahorros",
     numero: CUENTA_BANCOLOMBIA,
     titular: TITULAR_RECAUDO,
+      como: "Transferencia desde tu banco, o en efectivo en cualquier corresponsal.",
   },
   {
     canal: "NEQUI",
@@ -144,6 +160,8 @@ export const CUENTAS_RECAUDO: CuentaRecaudo[] = [
     tipo: "Celular",
     numero: CELULAR_RECAUDO,
     titular: TITULAR_RECAUDO,
+    qr: "/qr/nequi.jpg",
+      como: "Desde la app de Nequi: envía a un celular o escanea el QR.",
   },
   {
     canal: "DAVIPLATA",
@@ -151,13 +169,16 @@ export const CUENTAS_RECAUDO: CuentaRecaudo[] = [
     tipo: "Celular",
     numero: CELULAR_RECAUDO,
     titular: TITULAR_RECAUDO,
+      como: "Desde la app de Daviplata: envía a un celular.",
   },
   {
     canal: "BRE_B",
-    entidad: "Bre-B",
-    tipo: "Llave (celular)",
-    numero: CELULAR_RECAUDO,
+    entidad: "Bre-B · Bancolombia",
+    tipo: "Llave",
+    numero: LLAVE_BRE_B,
     titular: TITULAR_RECAUDO,
+    qr: "/qr/bancolombia.jpg",
+      como: "Desde la app de cualquier banco: busca la llave o escanea el QR.",
   },
 ];
 

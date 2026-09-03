@@ -8,7 +8,6 @@ import { inscripcionPorReferencia } from "@/lib/almacen";
 import {
   CUENTAS_RECAUDO,
   FECHA_LIMITE_ABONOS,
-  NOMBRE_COMPLETO,
   categoriaPorCodigo,
 } from "@/lib/catalogo";
 import { abonadoEnRevision } from "@/lib/dinero";
@@ -21,7 +20,7 @@ export const metadata = {
   // Datos personales: fuera de los buscadores, además del robots.txt.
   robots: { index: false, follow: false },
 
-  title: `Mi inscripción — ${NOMBRE_COMPLETO}`,
+  title: "Mi inscripción",
 };
 
 /**

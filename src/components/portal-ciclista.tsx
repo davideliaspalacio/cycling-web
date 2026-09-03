@@ -470,10 +470,18 @@ function Inscripcion({
                   ? `Pagar la cuota ${numeroDeCuota} de ${totalCuotas}`
                   : "Subir mi comprobante"}
               </Boton>
+              {/*
+                La fecha que se enseña es la de SU cuota, no el cierre general.
+                Antes, quien iba a pagar la primera veía "hasta el 3 de junio
+                de 2027" —el último día que admitimos comprobantes— y parecía
+                que tenía nueve meses para pagar la primera cuota.
+              */}
               <p className="text-[0.82rem] leading-snug text-tinta/75">
                 {numeroDeCuota > 1
                   ? `${pesos(aTransferir)}, hasta el ${fechaLarga(pago.venceProximaCuota ?? pago.fechaLimite)}`
-                  : `${pesos(aTransferir)} como mínimo · hasta el ${fechaLarga(pago.fechaLimite)}`}
+                  : totalCuotas > 1
+                    ? `${pesos(aTransferir)} · la cuota 1 de ${totalCuotas} se paga hoy para reservar el cupo`
+                    : `${pesos(aTransferir)} en una sola transferencia · tu cupo se confirma cuando verifiquemos el comprobante`}
               </p>
             </div>
           )

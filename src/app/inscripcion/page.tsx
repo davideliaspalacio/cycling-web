@@ -3,14 +3,13 @@ import { FormularioInscripcion } from "@/components/formulario/inscripcion";
 import {
   CUENTAS_RECAUDO,
   FECHA_LIMITE_ABONOS,
-  NOMBRE_COMPLETO,
   PRECIO_INSCRIPCION,
   categoriaPorCodigo,
 } from "@/lib/catalogo";
 import { planDeCuotas, planesViables } from "@/lib/dinero";
 
 export const metadata = {
-  title: `Inscripción — ${NOMBRE_COMPLETO}`,
+  title: "Inscripción",
 };
 
 export default async function PaginaInscripcion({

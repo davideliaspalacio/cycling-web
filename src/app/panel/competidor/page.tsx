@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Encabezado, Pie } from "@/components/marco";
 import { Chip, Tarjeta, TituloSeccion } from "@/components/ui";
 import { listarInscripciones } from "@/lib/almacen";
-import { NOMBRE_COMPLETO, categoriaPorCodigo } from "@/lib/catalogo";
+import { categoriaPorCodigo } from "@/lib/catalogo";
 import { pesos } from "@/lib/dinero";
 import type { Inscripcion } from "@/lib/tipos";
 import { Cesion } from "./cesion";
@@ -12,7 +12,7 @@ export const metadata = {
   // Datos personales: fuera de los buscadores, además del robots.txt.
   robots: { index: false, follow: false },
 
-  title: `Cambio de competidor — ${NOMBRE_COMPLETO}`,
+  title: "Cambio de competidor",
 };
 
 /**

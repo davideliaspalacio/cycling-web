@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { Encabezado, Pie } from "@/components/marco";
 import { Chip, Tarjeta, TituloSeccion } from "@/components/ui";
 import { abonosPorRevisar, listarInscripciones } from "@/lib/almacen";
-import { NOMBRE_COMPLETO, categoriaPorCodigo } from "@/lib/catalogo";
+import { categoriaPorCodigo } from "@/lib/catalogo";
 import { pesos } from "@/lib/dinero";
 import { COOKIE_SESION, leerSesion } from "@/lib/sesion";
 import type { EstadoInscripcion, PlanPago } from "@/lib/tipos";
@@ -14,7 +14,7 @@ export const metadata = {
   // Datos personales: fuera de los buscadores, además del robots.txt.
   robots: { index: false, follow: false },
 
-  title: `Panel de la organización — ${NOMBRE_COMPLETO}`,
+  title: "Panel de la organización",
 };
 
 const TONO: Record<EstadoInscripcion, "turquesa" | "sol" | "alerta" | "nube"> = {

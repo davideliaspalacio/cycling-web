@@ -9,7 +9,6 @@ import {
   inscripcionPorId,
 } from "@/lib/almacen";
 import {
-  NOMBRE_COMPLETO,
   categoriaPorCodigo,
   cuentaDeCanal,
 } from "@/lib/catalogo";
@@ -31,7 +30,7 @@ export const metadata = {
   // Datos personales: fuera de los buscadores, además del robots.txt.
   robots: { index: false, follow: false },
 
-  title: `Comprobantes por revisar — ${NOMBRE_COMPLETO}`,
+  title: "Comprobantes por revisar",
 };
 
 /**

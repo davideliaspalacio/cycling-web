@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 import { useEffect, useRef, useState } from "react";
 import type { CuentaRecaudo } from "@/lib/catalogo";
 
@@ -120,7 +122,7 @@ export function CuentasRecaudo({
 }) {
   return (
     <div className={className}>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid items-start gap-3 sm:grid-cols-2">
         {cuentas.map((cuenta) => (
           <div
             key={cuenta.canal}
@@ -148,6 +150,38 @@ export function CuentasRecaudo({
             <p className="text-[0.76rem] leading-snug text-tinta/75">
               A nombre de {cuenta.titular}
             </p>
+
+            <p className="border-t-2 border-dashed border-tinta/15 pt-2 text-[0.78rem] leading-snug text-tinta/75">
+              {cuenta.como}
+            </p>
+
+            {/*
+              Escanear el QR evita el error más caro del pago manual:
+              transcribir mal un dígito. Se abre a tamaño completo porque a
+              veces se paga desde el mismo teléfono que muestra la página.
+            */}
+            {cuenta.qr && (
+              <details className="mt-1 group">
+                <summary className="raya-mono cursor-pointer list-none text-[0.68rem] font-bold uppercase tracking-[0.1em] text-rio underline-offset-4 hover:underline">
+                  Ver código QR
+                </summary>
+                <a
+                  href={cuenta.qr}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 block overflow-hidden rounded-xl border-[3px] border-tinta"
+                >
+                  <Image
+                    src={cuenta.qr}
+                    alt={`Código QR para pagar por ${cuenta.entidad}`}
+                    width={900}
+                    height={900}
+                    sizes="(max-width: 640px) 90vw, 320px"
+                    className="h-auto w-full"
+                  />
+                </a>
+              </details>
+            )}
           </div>
         ))}
       </div>

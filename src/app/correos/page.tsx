@@ -3,14 +3,13 @@ import { Encabezado, Pie } from "@/components/marco";
 import { Chip, Tarjeta, TituloSeccion } from "@/components/ui";
 import { listarCorreos } from "@/lib/almacen";
 import { MODO_CORREO } from "@/lib/correos/enviar";
-import { NOMBRE_COMPLETO } from "@/lib/catalogo";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
   // Datos personales: fuera de los buscadores, además del robots.txt.
   robots: { index: false, follow: false },
- title: `Correos enviados — ${NOMBRE_COMPLETO}` };
+ title: "Correos enviados" };
 
 /**
  * El color dice qué clase de correo es de un vistazo: turquesa lo que confirma

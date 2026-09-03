@@ -1,7 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { inscripcionPorReferencia } from "@/lib/almacen";
-import { proximaCuota } from "@/lib/dinero";
+import {
+  cuotasDelPlan,
+  planDeCuotas,
+  proximaCuotaDelPlan,
+} from "@/lib/dinero";
 import { enviarAlCiclista } from "@/lib/correos/enviar";
 import { recordatorioCuota } from "@/lib/correos/plantillas";
 import { COOKIE_SESION, leerSesion } from "@/lib/sesion";
@@ -34,9 +38,21 @@ export async function POST(peticion: NextRequest) {
     return NextResponse.json({ error: "No encontramos esa inscripción." }, { status: 404 });
   }
 
-  const cuota = proximaCuota(inscripcion.cuotas);
+  /*
+   * La cuota sale del plan, no de la tabla `cuotas`: con pago por
+   * transferencia esa tabla está vacía y esto devolvía 409 siempre.
+   */
+  const plan = planDeCuotas(
+    inscripcion.total,
+    inscripcion.creadaEn,
+    cuotasDelPlan(inscripcion.plan),
+  );
+  const cuota = proximaCuotaDelPlan(plan, inscripcion.pagado);
   if (!cuota) {
-    return NextResponse.json({ error: "No queda ninguna cuota por cobrar." }, { status: 409 });
+    return NextResponse.json(
+      { error: "No queda ninguna cuota por pagar." },
+      { status: 409 },
+    );
   }
 
   await enviarAlCiclista(

@@ -6,21 +6,28 @@ import type { Inscripcion } from "../tipos";
 import type { PlantillaCorreo } from "./plantillas";
 
 /**
- * Envío transaccional por Brevo, con modo simulación.
+ * Envío transaccional por ZeptoMail (Zoho), con modo simulación.
  *
- * Se habla con la API por HTTP en vez de con el SDK: son quince líneas, una
+ * Se habla con la API por HTTP y no con un SDK: son quince líneas, una
  * dependencia menos que mantener y, sobre todo, cambiar de proveedor vuelve a
- * ser cambiar este archivo y nada más. Ya pasó una vez.
+ * ser cambiar este archivo y nada más. Ya pasó dos veces — Resend, Brevo.
+ *
+ * Por qué ZeptoMail: el gratuito de Brevo mete su marca al pie de cada correo
+ * y quitarla costaba unos 198 USD por los once meses hasta la carrera. Aquí
+ * son 2,50 USD por cada 10.000 correos, sin marca ajena en una confirmación
+ * de pago. Y es un servicio solo transaccional, que es todo lo que mandamos.
  *
  * Sin llave no falla: guarda el correo renderizado y lo deja visible en
  * /correos, así el flujo se demuestra completo sin credenciales. En
  * producción eso sí es un fallo, y se marca como tal.
  */
 
-const API_KEY = process.env.BREVO_API_KEY;
+const API_KEY = process.env.ZEPTOMAIL_API_KEY;
+/** Zoho separa centro de datos por región; la cuenta europea usa .eu */
+const API = process.env.ZEPTOMAIL_API_BASE ?? "https://api.zeptomail.com/v1.1/email";
 const RESPONDER_A = process.env.CORREO_RESPUESTA ?? EVENTO.correoContacto;
 
-/** Brevo quiere nombre y correo por separado, no "Nombre <correo>". */
+/** ZeptoMail quiere nombre y dirección separados, no "Nombre <correo>". */
 function remitente(): { name: string; email: string } {
   const crudo = process.env.CORREO_REMITENTE;
   if (crudo) {
@@ -42,30 +49,28 @@ const EN_PRODUCCION = process.env.NODE_ENV === "production";
  * saliendo, mientras /correos se llena de correos que parecen enviados. Por
  * eso ahí se llama por su nombre: `sin-configurar`.
  */
-export const MODO_CORREO: "brevo" | "simulacion" | "sin-configurar" = API_KEY
-  ? "brevo"
+export const MODO_CORREO: "zeptomail" | "simulacion" | "sin-configurar" = API_KEY
+  ? "zeptomail"
   : EN_PRODUCCION
     ? "sin-configurar"
     : "simulacion";
 
 if (MODO_CORREO === "sin-configurar") {
   console.error(
-    "[correos] FALTA BREVO_API_KEY EN PRODUCCIÓN. Ningún correo va a salir: " +
+    "[correos] FALTA ZEPTOMAIL_API_KEY EN PRODUCCIÓN. Ningún correo va a salir: " +
       "se guardan en /correos marcados como no enviados. El ciclista que " +
       "transfiere no recibirá confirmación.",
   );
 }
 
 // Un remitente de Gmail no falla aquí: falla en el primer envío real, que es
-// el peor momento para enterarse. El dominio hay que verificarlo en Brevo.
+// el peor momento para enterarse. El dominio hay que verificarlo en ZeptoMail.
 if (API_KEY && /@(gmail|hotmail|outlook|yahoo)\./i.test(REMITENTE.email)) {
   console.error(
     `[correos] El remitente ${REMITENTE.email} es de un dominio que no se ` +
-      "puede verificar. Brevo va a rechazar los envíos: hace falta dominio propio.",
+      "puede verificar. El proveedor va a rechazar los envíos: hace falta dominio propio.",
   );
 }
-
-const API = "https://api.brevo.com/v3/smtp/email";
 
 export async function enviarCorreo(params: {
   para: string;
@@ -80,22 +85,20 @@ export async function enviarCorreo(params: {
     const respuesta = await fetch(API, {
       method: "POST",
       headers: {
-        "api-key": API_KEY,
+        // Zoho no usa Bearer: el prefijo es suyo y la llave ya viene cifrada.
+        Authorization: `Zoho-enczapikey ${API_KEY}`,
         "Content-Type": "application/json",
         Accept: "application/json",
       },
       body: JSON.stringify({
-        sender: REMITENTE,
-        to: [{ email: params.para }],
-        replyTo: { email: RESPONDER_A },
+        from: { address: REMITENTE.email, name: REMITENTE.name },
+        to: [{ email_address: { address: params.para } }],
+        reply_to: [{ address: RESPONDER_A }],
         subject: params.contenido.asunto,
-        htmlContent: params.contenido.html,
-        textContent: params.contenido.texto,
-        headers: {
-          // Ayuda a que los recordatorios no se agrupen ni se marquen spam.
-          "X-Entity-Ref-ID": params.referencia ?? id,
-        },
-        tags: [params.plantilla],
+        htmlbody: params.contenido.html,
+        textbody: params.contenido.texto,
+        // Vuelve en los informes y en los webhooks de rebote.
+        client_reference: params.referencia ?? id,
       }),
     });
 
@@ -104,14 +107,15 @@ export async function enviarCorreo(params: {
       // diario, llave mal). Sin él, depurar esto a ciegas es horrible.
       const detalle = await respuesta.text().catch(() => "");
       throw new Error(
-        `Brevo respondió ${respuesta.status}: ${detalle.slice(0, 300)}`,
+        `ZeptoMail respondió ${respuesta.status}: ${detalle.slice(0, 300)}`,
       );
     }
 
     const cuerpo = (await respuesta.json().catch(() => ({}))) as {
-      messageId?: string;
+      request_id?: string;
+      data?: { message_id?: string }[];
     };
-    proveedorId = cuerpo.messageId;
+    proveedorId = cuerpo.data?.[0]?.message_id ?? cuerpo.request_id;
   }
 
   await registrarCorreo({

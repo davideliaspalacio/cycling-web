@@ -199,10 +199,11 @@ export type CorreoEnviado = {
    * `sin-configurar` es producción sin llave: el correo se guardó pero nunca
    * salió. Es un estado distinto de la simulación de desarrollo.
    *
-   * `resend` es histórico. Los correos guardan con qué proveedor salieron, y
-   * las filas anteriores al cambio siguen diciendo la verdad de su momento.
+   * `resend` y `brevo` son históricos. Cada correo guarda con qué proveedor
+   * salió, y las filas anteriores a cada cambio siguen diciendo la verdad de
+   * su momento.
    */
-  proveedor: "brevo" | "resend" | "simulacion" | "sin-configurar";
+  proveedor: "zeptomail" | "brevo" | "resend" | "simulacion" | "sin-configurar";
   proveedorId?: string;
   referencia?: string;
 };

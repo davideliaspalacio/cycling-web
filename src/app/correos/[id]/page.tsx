@@ -29,7 +29,7 @@ export default async function PaginaCorreo({ params }: PageProps<"/correos/[id]"
               ? "Simulado"
               : correo.proveedor === "sin-configurar"
                 ? "NO SE ENVIÓ — faltaba la llave del proveedor"
-                : `Enviado por ${correo.proveedor === "resend" ? "Resend" : "Brevo"}`}
+                : `Enviado por ${ {resend:"Resend", brevo:"Brevo", zeptomail:"ZeptoMail"}[correo.proveedor] ?? correo.proveedor }`}
           </Chip>
         </div>
 

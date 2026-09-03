@@ -182,3 +182,18 @@ cliente, el plan más barato la quita.
 El envío se hizo por HTTP contra la API en vez de con el SDK: quince
 líneas, una dependencia menos, y cambiar de proveedor vuelve a ser tocar
 `src/lib/correos/enviar.ts` y nada más. Ya pasó una vez.
+
+### Corrección 2: se cambia de Brevo a ZeptoMail
+
+El plan gratuito de Brevo mete **su marca al pie de cada correo**, y en un
+correo de confirmación de pago eso es publicidad ajena. Quitarla exige el
+plan Standard: 18 USD/mes, unos **198 USD** por los once meses que faltan
+hasta la carrera. Justo lo que evitamos al descartar Resend.
+
+ZeptoMail (de Zoho) cobra **2,50 USD por cada 10.000 correos**, con el
+primer crédito gratis y sin marca de nadie. Nuestros ~5.000 correos salen
+por **2,50 USD en total**. Además es un servicio solo transaccional, que
+es exactamente lo que mandamos.
+
+Verificado contra su API real con una llave falsa: responde 401 por la
+llave, no 400 por el formato.

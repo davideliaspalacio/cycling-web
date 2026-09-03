@@ -18,7 +18,7 @@ pnpm dev
 ```
 
 Sin `DATABASE_URL` la aplicación guarda en `.datos/` (archivos JSON), sin
-`BREVO_API_KEY` los correos se renderizan y quedan en `/correos` en vez de
+`ZEPTOMAIL_API_KEY` los correos se renderizan y quedan en `/correos` en vez de
 enviarse, y sin `BLOB_READ_WRITE_TOKEN` los comprobantes se guardan en disco.
 **Todo el flujo se puede demostrar sin una sola credencial.**
 
@@ -298,9 +298,9 @@ PANEL_CLAVE=        # la que se le da a quien revisa
 # Comprobantes. Sin esto se guardan en .datos/evidencias/
 BLOB_READ_WRITE_TOKEN=
 
-# Correo — Brevo. Sin esto, en desarrollo se renderizan en /correos; en
+# Correo — ZeptoMail. Sin esto, en desarrollo se renderizan en /correos; en
 # producción se marcan como NO ENVIADOS y se avisa en pantalla.
-BREVO_API_KEY=
+ZEPTOMAIL_API_KEY=
 # Exige dominio propio verificado. Un remitente de Gmail se rechaza.
 CORREO_REMITENTE=
 CORREO_RESPUESTA=   # aquí sí puede ir el Gmail de la organización
@@ -331,7 +331,7 @@ en el importador: ya se perdió una en silencio por olvidarlo.
 - [ ] **Identidad por persona en el panel** si va a revisar más de una.
 - [ ] **Rotar credenciales**: las llaves y la cadena de conexión que se usaron
       en desarrollo viajaron por chat. Trátalas como comprometidas.
-- [ ] **Dominio propio verificado en Brevo.** Es lo único bloqueante del
+- [ ] **Dominio propio verificado en ZeptoMail.** Es lo único bloqueante del
       correo: los remitentes de Gmail se rechazan. Unos 12 USD/año de dominio
       más tres registros DNS. Las respuestas pueden seguir llegando al Gmail
       de la organización vía `CORREO_RESPUESTA`.

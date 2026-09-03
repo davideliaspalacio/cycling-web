@@ -33,8 +33,8 @@
     letter-spacing:.16em;text-transform:uppercase;color:var(--tenue);margin:0 0 3pt}
 
   .aviso{background:var(--bruma);border:2pt solid var(--tinta);border-radius:7pt;padding:8pt 11pt;margin-bottom:10pt}
-  .ojo{background:var(--sol);border:2pt solid var(--tinta);border-radius:7pt;padding:8pt 11pt;margin-bottom:10pt}
-  .url{border:2pt dashed var(--tinta);border-radius:7pt;padding:8pt 11pt;margin-bottom:11pt;background:var(--bruma)}
+  .ojo{background:var(--sol);border:2pt solid var(--tinta);border-radius:7pt;padding:7pt 11pt;margin-bottom:8pt}
+  .url{border:2pt dashed var(--tinta);border-radius:7pt;padding:7pt 11pt;margin-bottom:9pt;background:var(--bruma)}
   .url .linea{border-bottom:1.4pt solid var(--tinta);height:19pt;margin-top:4pt}
 
   table{width:100%;border-collapse:collapse;margin:0 0 10pt}
@@ -46,14 +46,14 @@
   td.ruta{font-family:"Space Mono",monospace;font-size:9pt;font-weight:700;white-space:nowrap;color:var(--rio)}
   .gris{color:var(--grafito)}
 
-  .caso{border:1.6pt solid var(--tinta);border-radius:8pt;padding:7pt 10pt;margin-bottom:5.6pt;page-break-inside:avoid}
+  .caso{border:1.6pt solid var(--tinta);border-radius:8pt;padding:5.6pt 10pt;margin-bottom:4.4pt;page-break-inside:avoid}
   .caso .cab{display:flex;align-items:baseline;gap:7pt;margin-bottom:3pt}
   .n{font-family:"Space Mono",monospace;font-size:8pt;font-weight:700;background:var(--tinta);
      color:#fff;border-radius:99pt;width:17pt;height:17pt;display:inline-flex;
      align-items:center;justify-content:center;flex:0 0 17pt}
   .caso h3{font-size:10.4pt}
   .caso .donde{font-family:"Space Mono",monospace;font-size:8.2pt;color:var(--rio);margin-left:auto;font-weight:700}
-  .caso dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:2.5pt 8pt}
+  .caso dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:1.8pt 8pt}
   .caso dt{font-family:"Space Mono",monospace;font-size:7pt;font-weight:700;letter-spacing:.1em;
     text-transform:uppercase;color:var(--tenue);padding-top:1.5pt;white-space:nowrap}
   .caso dd{margin:0}
@@ -82,7 +82,13 @@
 
   <div class="url">
     <p class="cejilla" style="margin:0">La dirección de la plataforma</p>
-    <p class="mono" style="margin:4pt 0 0;font-size:12pt;font-weight:700">cycling-web-two.vercel.app</p>
+    <p class="mono" style="margin:4pt 0 0;font-size:12.6pt;font-weight:700">santanderxtreme.com</p>
+  </div>
+
+  <div class="aviso" style="background:#e6f7ec">
+    <p style="margin:0"><strong>Los correos ya llegan de verdad.</strong> Usa tu
+    correo real al inscribirte y vas a recibir cada aviso en tu bandeja, igual
+    que lo recibirá un ciclista. Revísalos: son parte de lo que hay que probar.</p>
   </div>
 
   <h2>Lo que cambió</h2>
@@ -92,13 +98,6 @@
   hasta tres abonos.</p>
   <p class="gris">El dorsal solo aparece cuando termina de pagar. Mientras deba algo,
   ve una constancia que le dice cuánto le falta.</p>
-
-  <div class="ojo">
-    <p style="margin:0"><strong>Todavía no está conectado el envío de correos.</strong>
-    Ningún correo va a llegar a tu bandeja: no es un fallo, es algo que falta
-    contratar. Los correos <em>sí</em> se generan y los puedes leer dentro de la
-    plataforma (página 3, caso 12) para revisar que los textos estén bien.</p>
-  </div>
 
   <h2>Datos para inscribirte de prueba</h2>
   <p>Usa un documento distinto en cada inscripción: la plataforma no deja repetirlo,
@@ -197,14 +196,22 @@
 
   <div class="ojo">
     <p style="margin:0"><strong>Esta parte es privada.</strong> Las páginas del panel
-    dejan aprobar dinero y ver datos personales de los inscritos.
-    <strong>No compartas estas direcciones ni la clave</strong> con nadie fuera de la
-    organización.</p>
+    dejan aprobar dinero y ver los datos de todos los inscritos, y la clave es la
+    misma para todos. <strong>No la compartas por grupos de WhatsApp ni la dejes
+    escrita donde la vea cualquiera.</strong> Si alguien deja la organización,
+    avísanos y la cambiamos.</p>
   </div>
 
   <div class="url">
-    <p class="cejilla" style="margin:0">Clave del panel — te la enviamos aparte</p>
-    <div class="linea"></div>
+    <p class="cejilla" style="margin:0">Para entrar al panel</p>
+    <table style="margin:5pt 0 0">
+      <tr><td style="padding:2pt 0;width:74pt"><span class="gris">Dirección</span></td>
+          <td class="mono" style="padding:2pt 0;font-weight:700">santanderxtreme.com/panel</td></tr>
+      <tr><td style="padding:2pt 0"><span class="gris">Tu nombre</span></td>
+          <td style="padding:2pt 0">el tuyo — queda junto a cada aprobación</td></tr>
+      <tr><td style="padding:2pt 0;border:0"><span class="gris">Clave</span></td>
+          <td class="mono" style="padding:2pt 0;font-weight:700;font-size:11.5pt;border:0">xLIG_et_1JSY</td></tr>
+    </table>
   </div>
 
   <div class="caso">
@@ -248,20 +255,12 @@
   </div>
 
   <div class="caso">
-    <div class="cab"><span class="n">12</span><h3>Ver los correos que recibe el ciclista</h3><span class="donde">/correos</span></div>
+    <div class="cab"><span class="n">12</span><h3>Comprobar si a un ciclista le llegó el correo</h3><span class="donde">/panel/correos</span></div>
     <dl>
-      <dt>Haz</dt><dd>Entra y abre cualquiera para verlo tal como llega a la bandeja.</dd>
-      <dt>Espera</dt><dd>Están la confirmación, el aviso de comprobante recibido, el de aprobado y el de rechazado.</dd>
+      <dt>Haz</dt><dd>Busca por el nombre, el correo o la referencia de la persona.</dd>
+      <dt>Espera</dt><dd>Ves cada correo que se le mandó, cuándo, y si <strong>llegó</strong>, <strong>rebotó</strong> o lo marcó como spam. Si rebotó, te dice el motivo y qué hacer.</dd>
+      <dt>Ojo</dt><dd>Es la pantalla para cuando alguien dice «no me llegó nada». Un rebote permanente casi siempre significa que escribió mal su correo. Desde ahí también puedes abrir cada correo y leerlo igual que lo recibe el ciclista.</dd>
     </dl>
-  </div>
-
-  <div class="ojo">
-    <p style="margin:0"><strong>Recuerda: el envío de correos no está conectado
-    todavía.</strong> Faltan dos cosas por contratar: el servicio que los manda y un
-    dominio propio del evento — los correos no pueden salir desde una dirección de
-    Gmail. Mientras tanto se generan y se guardan aquí, así que puedes revisar que
-    los textos digan lo correcto. <strong>Que no lleguen a tu bandeja no es un
-    fallo.</strong></p>
   </div>
 
   <div class="pie">¿Encontraste algo raro? Cuéntanos en qué página estabas, qué hiciste y qué esperabas que pasara. Una captura de pantalla ayuda mucho.</div>

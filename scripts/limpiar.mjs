@@ -43,6 +43,23 @@ try {
     process.exit(0);
   }
 
+  /*
+   * Seguro. Este script se escribió para vaciar la base antes de abrir
+   * inscripciones; desde que hay gente inscrita de verdad, correrlo por
+   * inercia borraría a personas que ya pagaron. Exige confirmar el número
+   * exacto de inscripciones que se van a perder.
+   */
+  const esperado = process.argv.find((a) => a.startsWith("--confirmo="));
+  const n = esperado ? Number(esperado.split("=")[1]) : NaN;
+  if (n !== antes.inscripciones) {
+    console.error(
+      `  ALTO. Hay ${antes.inscripciones} inscripciones y este script las borra TODAS.\n` +
+        `  Si de verdad quieres perderlas, repite el número:\n\n` +
+        `    node --env-file=.env.local scripts/limpiar.mjs --borrar --confirmo=${antes.inscripciones}\n`,
+    );
+    process.exit(1);
+  }
+
   const cliente = await pool.connect();
   try {
     // En una transacción: o se borra todo o no se borra nada. `cuotas` y

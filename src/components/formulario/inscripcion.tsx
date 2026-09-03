@@ -91,6 +91,8 @@ export function FormularioInscripcion({
   const [enviando, setEnviando] = useState(false);
   const [referencia, setReferencia] = useState<string | null>(null);
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
+  /** Referencia de la inscripción que ya existe para este documento, si la hay. */
+  const [yaInscrito, setYaInscrito] = useState<string | null>(null);
 
   const categoria = useMemo(
     () => categoriaPorCodigo(categoriaCodigo),
@@ -120,6 +122,7 @@ export function FormularioInscripcion({
   function irA(destino: number) {
     setPaso(destino);
     setErrorGeneral(null);
+    setYaInscrito(null);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -186,6 +189,15 @@ export function FormularioInscripcion({
         const datos = await res.json();
         if (!res.ok) {
           setErrorGeneral(datos.error ?? "No pudimos guardar la inscripción.");
+          /*
+           * Cuando el documento ya está inscrito, el servidor devuelve la
+           * referencia de la inscripción existente. Sin esto, el ciclista leía
+           * "ya tienes la inscripción SX27-…" y se quedaba ahí: la respuesta a
+           * su problema estaba en otra página que nadie le decía cómo abrir.
+           */
+          setYaInscrito(
+            typeof datos.referencia === "string" ? datos.referencia : null,
+          );
           return;
         }
         setReferencia(datos.referencia);
@@ -259,12 +271,24 @@ export function FormularioInscripcion({
       </div>
 
       {errorGeneral && (
-        <p
+        <div
           role="alert"
-          className="mt-5 rounded-2xl border-[3px] border-tinta bg-alerta px-4 py-3 font-display text-sm font-bold text-nube"
+          className="mt-5 rounded-2xl border-[3px] border-tinta bg-alerta px-4 py-3 text-nube"
         >
-          {errorGeneral}
-        </p>
+          <p className="font-display text-sm font-bold">{errorGeneral}</p>
+          {yaInscrito && (
+            <p className="mt-2 text-[0.88rem] leading-snug">
+              No hace falta que te inscribas otra vez.{" "}
+              <a
+                href={`/mi-inscripcion?ref=${yaInscrito}`}
+                className="font-bold underline underline-offset-2"
+              >
+                Mira tu inscripción y termina de pagar aquí
+              </a>
+              .
+            </p>
+          )}
+        </div>
       )}
 
       {paso < 4 && (

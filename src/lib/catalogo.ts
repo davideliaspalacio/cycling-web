@@ -415,6 +415,8 @@ export const EMBAJADORES = [
   "GoyeBike – Bogotá",
   "EspecializedBucaramanga – Bucaramanga",
   "EspecializedTunja – Tunja",
+  "SabanaBike – Duitama",
+  "LaFugaMTB – San Andrés",
 ];
 
 /** Opción del selector que abre el campo libre para una comunidad nueva. */

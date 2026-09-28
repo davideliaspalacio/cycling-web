@@ -105,6 +105,7 @@ const TEXTO_EVENTO: Record<string, string> = {
   "inscripcion-completa": "Inscripción completa",
   vencida: "Se pasó de fecha",
   "cambio-de-competidor": "Cambio de competidor",
+  "correccion-de-datos": "Corrección de datos",
 };
 
 const nombreDeEvento = (tipo: string) =>
@@ -298,6 +299,18 @@ export default async function FichaDelInscrito({
         </div>
 
         <div className="mt-4 flex flex-wrap gap-3">
+          {/*
+            Corregir y ceder son cosas distintas y se entra por puertas
+            distintas a propósito: la corrección arregla un dato mal escrito del
+            mismo titular; la cesión le pasa el cupo a otra persona y deja otra
+            clase de constancia.
+          */}
+          <BotonEnlace
+            href={`/panel/inscrito/${encodeURIComponent(ins.referencia)}/editar`}
+            tono="turquesa"
+          >
+            Corregir sus datos
+          </BotonEnlace>
           <BotonEnlace
             href={`/panel/competidor?q=${encodeURIComponent(ins.referencia)}`}
             tono="sol"

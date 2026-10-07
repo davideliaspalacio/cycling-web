@@ -139,7 +139,13 @@ export function CampoCodigoReferido({
             autoCapitalize="characters"
             spellCheck={false}
             maxLength={LARGO_MAX_CODIGO}
-            placeholder="PICHURRIAS10"
+            {/*
+              Un ejemplo con sufijo al azar, no «nombre del embajador + 10».
+              Esta página es pública y el desplegable de arriba lista a los 22
+              embajadores: enseñar aquí el patrón real sería dar la receta para
+              adivinar códigos ajenos.
+            */}
+            placeholder="XTREME-7F3QK2"
             value={texto}
             onChange={(e) => escribir(e.target.value)}
           />

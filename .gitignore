@@ -48,3 +48,6 @@ next-env.d.ts
 videos-demo/*.mp4
 videos-demo/.crudo/
 entregables/*.pdf
+
+# Registro del servidor de Excalidraw: ruido local, no código.
+excalidraw.log

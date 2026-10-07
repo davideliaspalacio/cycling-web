@@ -221,6 +221,26 @@ function cuotasDeLaInscripcion(ins: Inscripcion) {
  */
 function tablaDelPlan(ins: Inscripcion): string {
   const cuotas = cuotasDeLaInscripcion(ins);
+  /*
+   * Con descuento, las cuotas suman 423.000 y no los 470.000 que anuncia la
+   * página. Sin estas dos líneas el ciclista no tiene cómo saber por qué, y la
+   * tabla parecería estar cobrándole otra cosa. Sale de `ins.descuento`, que es
+   * el descuento que se le aplicó a él en pesos: si mañana el porcentaje
+   * cambia, este correo sigue diciendo la verdad de su inscripción.
+   */
+  const descuento =
+    ins.descuento > 0
+      ? `<tr>
+        <td style="padding:11px 0;border-bottom:1px solid ${LINEA};font-family:${MONO};font-size:14px;font-weight:700;color:${TINTA}">Precio de tu etapa</td>
+        <td style="padding:11px 0;border-bottom:1px solid ${LINEA};font-family:${FUENTE};font-size:13px;color:${GRIS}">Antes del descuento</td>
+        <td align="right" style="padding:11px 0;border-bottom:1px solid ${LINEA};font-family:${MONO};font-size:15px;color:${GRIS}">${pesos(ins.precioBase)}</td>
+      </tr>
+      <tr>
+        <td style="padding:11px 0;border-bottom:1px solid ${LINEA};font-family:${MONO};font-size:14px;font-weight:700;color:${TINTA}">Descuento${ins.codigoReferido ? ` ${ins.codigoReferido}` : ""}</td>
+        <td style="padding:11px 0;border-bottom:1px solid ${LINEA};font-family:${FUENTE};font-size:13px;color:${GRIS}">Ya aplicado</td>
+        <td align="right" style="padding:11px 0;border-bottom:1px solid ${LINEA};font-family:${MONO};font-size:15px;font-weight:700;color:${TINTA}">−${pesos(ins.descuento)}</td>
+      </tr>`
+      : "";
   const filas = cuotas
     .map(
       (c) => `<tr>
@@ -230,7 +250,7 @@ function tablaDelPlan(ins: Inscripcion): string {
       </tr>`,
     )
     .join("");
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:18px 0 6px">${filas}</table>`;
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:18px 0 6px">${descuento}${filas}</table>`;
 }
 
 /** Cuadro de motivo, para lo que el ciclista tiene que leer sí o sí. */

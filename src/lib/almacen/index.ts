@@ -49,6 +49,16 @@ export const abonosConMismaEvidencia = impl.abonosConMismaEvidencia;
 export const reclamarAbono = impl.reclamarAbono;
 export const resolverAbono = impl.resolverAbono;
 
+// Códigos de referido. Se desactivan, no se borran: una inscripción guarda el
+// texto del código, así que borrar uno usado dejaría su descuento sin
+// procedencia. `borrarCodigo` solo deja borrar los que nadie usó.
+export const codigoPorTexto = impl.codigoPorTexto;
+export const listarCodigos = impl.listarCodigos;
+export const crearCodigo = impl.crearCodigo;
+export const cambiarActivoCodigo = impl.cambiarActivoCodigo;
+export const sumarUsoDeCodigo = impl.sumarUsoDeCodigo;
+export const borrarCodigo = impl.borrarCodigo;
+
 export const registrarCorreo = impl.registrarCorreo;
 export const listarCorreos = impl.listarCorreos;
 export const correoPorId = impl.correoPorId;

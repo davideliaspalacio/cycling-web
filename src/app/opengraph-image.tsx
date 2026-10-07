@@ -1,7 +1,12 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { ImageResponse } from "next/og";
-import { EVENTO, NOMBRE_COMPLETO, PRECIO_INSCRIPCION } from "@/lib/catalogo";
+import {
+  ETAPA_ACTIVA,
+  EVENTO,
+  NOMBRE_COMPLETO,
+  PRECIO_INSCRIPCION,
+} from "@/lib/catalogo";
 import { pesos } from "@/lib/dinero";
 
 /**
@@ -48,7 +53,14 @@ export default async function Imagen() {
             width: 680,
           }}
         >
-          <img src={logo} alt="" width={250} height={270} style={{ objectFit: "contain" }} />
+          {/*
+            Alto reducido de 270 a 232: la tarjeta mide 630 px exactos y el
+            distintivo del descuento añadió una línea abajo. Sin recortar el
+            logotipo, "MTB · XCM · 2 etapas" se salía del borde inferior y se
+            veía cortado en la vista previa de WhatsApp. `objectFit: contain`
+            mantiene la proporción, así que el logotipo no se deforma.
+          */}
+          <img src={logo} alt="" width={250} height={232} style={{ objectFit: "contain" }} />
 
           <div style={{ display: "flex", flexDirection: "column" }}>
             <div
@@ -79,21 +91,60 @@ export default async function Imagen() {
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          {/*
+            El precio y, si la etapa abierta lo tiene, su descuento por código.
+            Los dos salen del catálogo, igual que las fechas: la tarjeta que
+            circula por WhatsApp no puede quedarse anunciando las condiciones
+            de una etapa cerrada.
+
+            Va todo dentro de UNA columna porque el contenedor de la izquierda
+            reparte con `space-between`: con un cuarto hijo, las piezas se
+            separarían en vez de quedar agrupadas abajo.
+
+            El tipo de carrera baja a su propia línea: con el segundo
+            distintivo al lado del precio, la fila se saldría de los 576 px
+            útiles de esta columna (680 menos los 52 de margen a cada lado).
+          */}
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <div
+                style={{
+                  display: "flex",
+                  background: "#0b4f8f",
+                  color: "#fff",
+                  borderRadius: 999,
+                  padding: "12px 26px",
+                  fontSize: 26,
+                  fontWeight: 700,
+                }}
+              >
+                {pesos(PRECIO_INSCRIPCION)}
+              </div>
+              {ETAPA_ACTIVA.descuento > 0 && (
+                <div
+                  style={{
+                    display: "flex",
+                    background: "#ffd24a",
+                    color: "#08213a",
+                    borderRadius: 999,
+                    padding: "12px 24px",
+                    fontSize: 22,
+                    fontWeight: 700,
+                    letterSpacing: 1,
+                  }}
+                >
+                  −{ETAPA_ACTIVA.descuento}% CON CÓDIGO
+                </div>
+              )}
+            </div>
             <div
               style={{
                 display: "flex",
-                background: "#0b4f8f",
-                color: "#fff",
-                borderRadius: 999,
-                padding: "12px 26px",
-                fontSize: 26,
-                fontWeight: 700,
+                fontSize: 22,
+                color: "#08213a",
+                marginTop: 12,
               }}
             >
-              {pesos(PRECIO_INSCRIPCION)}
-            </div>
-            <div style={{ display: "flex", fontSize: 22, color: "#08213a" }}>
               {EVENTO.tipo}
             </div>
           </div>

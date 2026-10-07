@@ -3,8 +3,10 @@ import {
   ANIO_CARRERA,
   CANALES_PAGO,
   CATEGORIAS,
+  LARGO_MAX_CODIGO,
   TALLAS,
   TIPOS_RH,
+  normalizarCodigo,
 } from "./catalogo";
 
 const texto = (min: number, max: number, campo: string) =>
@@ -63,6 +65,22 @@ export const esquemaConsentimientos = z.object({
   exoneracion: z.literal(true),
 });
 
+/**
+ * El código de referido que escribió el ciclista.
+ *
+ * Opcional y permisivo a propósito: **un código mal escrito no puede tumbar
+ * una inscripción.** Aquí solo se normaliza y se acota el largo; si existe, si
+ * está activo y si su etapa da descuento lo decide `revisarCodigo`
+ * (`src/lib/servicio.ts`), que es quien puede mirar la base. Rechazarlo con un
+ * 422 dejaría al ciclista atascado en el último paso por una errata.
+ */
+export const esquemaCodigoReferido = z
+  .string()
+  .trim()
+  .max(LARGO_MAX_CODIGO * 3, "Ese código es demasiado largo.")
+  .transform(normalizarCodigo)
+  .optional();
+
 export const esquemaInscripcion = z.object({
   categoriaCodigo: z.enum(
     CATEGORIAS.map((c) => c.codigo) as [string, ...string[]],
@@ -70,9 +88,15 @@ export const esquemaInscripcion = z.object({
   ciclista: esquemaCiclista,
   tallas: esquemaTallas,
   consentimientos: esquemaConsentimientos,
+  codigoReferido: esquemaCodigoReferido,
 });
 
 export type EntradaInscripcion = z.infer<typeof esquemaInscripcion>;
+
+/** Lo que manda el formulario para ver el precio con descuento antes de pagar. */
+export const esquemaRevisionCodigo = z.object({
+  codigo: esquemaCodigoReferido,
+});
 
 /** Edad cumplida al 31 de diciembre del año de la carrera. */
 export function edadEnCarrera(

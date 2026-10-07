@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import {
   abonosDe,
   abonosPorRevisar,
+  codigoPorTexto,
   crearAbono,
   guardarInscripcion,
   inscripcionDuplicada,
@@ -10,16 +11,22 @@ import {
   nuevaReferencia,
   reclamarAbono,
   resolverAbono,
+  sumarUsoDeCodigo,
 } from "./almacen";
 import {
+  ETAPA_ACTIVA,
   FECHA_LIMITE_ABONOS,
   categoriaPorCodigo,
   cuentaDeCanal,
+  etapaDeInscripcion,
+  normalizarCodigo,
+  type Etapa,
 } from "./catalogo";
 import {
   abonadoVerificado,
   abonosQueCuentan,
   cuotasDelPlan,
+  descuentoEnPesos,
   diasHasta,
   estadoDesdeAbonos,
   excedente,
@@ -80,13 +87,122 @@ async function avisar(
   }
 }
 
+/* --------------------------- Códigos de referido ---------------------------- */
+
+/**
+ * Qué pasa con el código que escribió el ciclista.
+ *
+ * `aplica` es lo único que mueve dinero. Las otras tres razones no son
+ * errores: un código mal escrito, caducado o puesto en una etapa que no da
+ * descuento **no puede tumbar la inscripción** —el ciclista ya llenó cinco
+ * pasos—, así que se avisa y se sigue sin descuento.
+ */
+export type RevisionCodigo = {
+  /** El código normalizado, tal como se guardaría. Vacío si no escribió nada. */
+  codigo: string;
+  aplica: boolean;
+  /** Pesos, no porcentaje: es lo que se guarda en la inscripción. */
+  descuento: number;
+  /** El porcentaje que se usó para calcularlo, para poder decirlo en pantalla. */
+  porcentaje: number;
+  /** Precio de lista de la etapa, antes del descuento. */
+  precioBase: number;
+  /** Lo que acabaría debiendo: `precioBase − descuento`. */
+  total: number;
+  propietario?: string;
+  /** Por qué no aplica. `null` cuando aplica o cuando no escribió código. */
+  motivo: "SIN_CODIGO" | "NO_EXISTE" | "INACTIVO" | "ETAPA_SIN_DESCUENTO" | null;
+  /** El aviso que se le enseña. `null` cuando no hay nada que decir. */
+  aviso: string | null;
+};
+
+/**
+ * Revisa un código contra una etapa, sin escribir nada.
+ *
+ * Se usa en dos sitios y tiene que dar lo mismo en los dos: el formulario la
+ * llama para enseñar el precio con descuento **antes** de pagar, y
+ * `crearInscripcion` la vuelve a llamar para decidir de verdad. Lo que decide
+ * es la segunda llamada: lo que diga el navegador no se usa para nada más que
+ * pintar.
+ */
+export async function revisarCodigo(
+  textoCrudo: string | undefined,
+  etapa: Etapa = ETAPA_ACTIVA,
+): Promise<RevisionCodigo> {
+  const codigo = normalizarCodigo(textoCrudo ?? "");
+  const base = {
+    codigo,
+    aplica: false as boolean,
+    descuento: 0,
+    porcentaje: etapa.descuento,
+    precioBase: etapa.precio,
+    total: etapa.precio,
+    propietario: undefined as string | undefined,
+  };
+
+  if (!codigo) {
+    return { ...base, motivo: "SIN_CODIGO", aviso: null };
+  }
+
+  if (etapa.descuento <= 0) {
+    return {
+      ...base,
+      motivo: "ETAPA_SIN_DESCUENTO",
+      aviso:
+        "La etapa de inscripción abierta ahora no tiene descuento por referido. Tu inscripción sigue adelante al precio de lista.",
+    };
+  }
+
+  const registro = await codigoPorTexto(codigo);
+  if (!registro) {
+    return {
+      ...base,
+      motivo: "NO_EXISTE",
+      aviso: `El código «${codigo}» no existe. Revisa que esté bien escrito o pídeselo otra vez a tu embajador; tu inscripción sigue adelante sin descuento.`,
+    };
+  }
+  if (!registro.activo) {
+    return {
+      ...base,
+      propietario: registro.propietario,
+      motivo: "INACTIVO",
+      aviso: `El código «${codigo}» ya no está vigente. Tu inscripción sigue adelante sin descuento.`,
+    };
+  }
+
+  const descuento = descuentoEnPesos(etapa.precio, etapa.descuento);
+  return {
+    ...base,
+    aplica: true,
+    descuento,
+    total: etapa.precio - descuento,
+    propietario: registro.propietario,
+    motivo: null,
+    aviso: null,
+  };
+}
+
 /* ------------------------------ Crear inscripción ----------------------------- */
+
+export type ResultadoCreacion = {
+  inscripcion: Inscripcion;
+  /** La revisión del código, para que la interfaz diga qué pasó con él. */
+  codigo: RevisionCodigo;
+};
 
 export async function crearInscripcion(
   entrada: EntradaInscripcion,
-): Promise<Inscripcion> {
+): Promise<ResultadoCreacion> {
   const categoria = categoriaPorCodigo(entrada.categoriaCodigo);
   if (!categoria) throw new Error("La categoría no existe.");
+
+  /*
+   * La etapa se resuelve en el servidor y de la etapa activa: ni el navegador
+   * la elige ni sale de la categoría. Es la cifra que fija el precio y los
+   * planes de cuotas de esta inscripción para siempre.
+   */
+  const etapa = ETAPA_ACTIVA;
+  const codigo = await revisarCodigo(entrada.codigoReferido, etapa);
 
   const referencia = nuevaReferencia();
   const inscripcion: Inscripcion = {
@@ -103,7 +219,15 @@ export async function crearInscripcion(
     // TOTAL y pasa a ABONOS solo cuando llega el primer abono parcial.
     plan: "TOTAL",
     medioPago: "TRANSFERENCIA",
-    total: categoria.precio,
+    // La etapa y su precio de lista quedan escritos aquí y no se vuelven a
+    // consultar al catálogo: es lo que impide que abrir una etapa más cara le
+    // cambie la deuda a quien ya está pagando.
+    etapa: etapa.codigo,
+    precioBase: etapa.precio,
+    codigoReferido: codigo.aplica ? codigo.codigo : undefined,
+    // En pesos, no en porcentaje. Si el 10% cambia mañana, esto no se mueve.
+    descuento: codigo.aplica ? codigo.descuento : 0,
+    total: codigo.aplica ? etapa.precio - codigo.descuento : etapa.precio,
     pagado: 0,
     cuotas: [],
     eventos: [],
@@ -111,9 +235,47 @@ export async function crearInscripcion(
   anota(
     inscripcion,
     "creada",
-    `Formulario completo · ${categoria.nombre} · ${inscripcion.ciclista.ciudad}`,
+    `Formulario completo · ${categoria.nombre} · ${inscripcion.ciclista.ciudad}` +
+      ` · etapa ${etapa.nombre} a ${pesosSimple(etapa.precio)}`,
   );
-  return guardarInscripcion(inscripcion);
+  if (codigo.aplica) {
+    anota(
+      inscripcion,
+      "descuento-aplicado",
+      `Código ${codigo.codigo}${codigo.propietario ? ` (${codigo.propietario})` : ""}: ` +
+        `−${pesosSimple(codigo.descuento)} (${codigo.porcentaje}% de ${pesosSimple(etapa.precio)}). ` +
+        `Total a pagar ${pesosSimple(inscripcion.total)}.`,
+    );
+  } else if (codigo.codigo) {
+    // Queda anotado aunque no aplique: si el ciclista reclama "yo puse el
+    // código", esto es lo que dice qué pasó y por qué.
+    anota(
+      inscripcion,
+      "descuento-no-aplicado",
+      `Escribió el código ${codigo.codigo} y no se aplicó (${codigo.motivo}).`,
+    );
+  }
+
+  const guardada = await guardarInscripcion(inscripcion);
+
+  /*
+   * El contador del código se sube DESPUÉS de guardar y sin poder tumbar la
+   * inscripción. El uso de verdad es la fila que acaba de quedar escrita con
+   * `codigo_referido`; este contador es la cuenta propia del registro, y
+   * perderlo por un fallo de red sería mucho peor que tenerlo corto.
+   */
+  if (codigo.aplica) {
+    try {
+      await sumarUsoDeCodigo(codigo.codigo);
+    } catch (error) {
+      console.error(
+        `[codigos] no se pudo contar el uso de ${codigo.codigo}:`,
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
+
+  return { inscripcion: guardada, codigo };
 }
 
 /* --------------------------------- Cobros ------------------------------------ */
@@ -222,6 +384,22 @@ export async function barrerRecordatorios(
  */
 
 /**
+ * Los planes de cuotas que todavía caben para ESTA inscripción.
+ *
+ * Dos cosas a la vez, y las dos importan: los planes salen de la etapa en la
+ * que entró —1, 2 o 3 en la primera; 1, 2, 3 o 4 en la segunda— y se filtran
+ * contra su fecha de inscripción, porque un plan cuya última cuota no llega
+ * antes del cierre no se puede ofrecer.
+ *
+ * Que exista esta función es lo que impide el error de fondo del encargo:
+ * preguntarle al catálogo vigente en cuántas cuotas puede pagar alguien que se
+ * inscribió con otras condiciones.
+ */
+function planesDe(ins: Inscripcion): number[] {
+  return planesViables(ins.creadaEn, etapaDeInscripcion(ins).planes);
+}
+
+/**
  * En cuántas cuotas queda la inscripción según lo que declara su **primer**
  * comprobante.
  *
@@ -233,7 +411,9 @@ export async function barrerRecordatorios(
  */
 function cuotasSegunElPrimerAbono(ins: Inscripcion, declarado: number): number {
   if (declarado >= ins.total) return 1;
-  const diferidos = planesViables(ins.creadaEn).filter((n) => n > 1);
+  // Los planes son los de SU etapa: una inscripción de la etapa 1 no puede
+  // caer en el plan de cuatro cuotas aunque la etapa activa ya lo ofrezca.
+  const diferidos = planesDe(ins).filter((n) => n > 1);
   for (const n of diferidos) {
     if (montosDelPlan(ins.total, n)[0] <= declarado) return n;
   }
@@ -258,7 +438,10 @@ export function montoMinimoDeAbono(ins: Inscripcion, previos: Abono[]): number {
   const hechos = abonosQueCuentan(previos).length;
 
   if (hechos === 0) {
-    return Math.min(montosDelPlan(ins.total, maxCuotasViables(ins.creadaEn))[0], saldo);
+    return Math.min(
+      montosDelPlan(ins.total, maxCuotasViables(ins.creadaEn, etapaDeInscripcion(ins).planes))[0],
+      saldo,
+    );
   }
 
   const cuotas = cuotasDelPlan(ins.plan);
@@ -297,7 +480,7 @@ function montoExigido(
       mensaje: `Tu inscripción se paga de una: el comprobante tiene que ser por ${pesosSimple(saldo)}. Ya no queda plazo para repartirla en cuotas antes del ${fechaLarga(FECHA_LIMITE_ABONOS)}.`,
     };
   }
-  const opciones = planesViables(ins.creadaEn)
+  const opciones = planesDe(ins)
     .map((n) =>
       n === 1
         ? `${pesosSimple(ins.total)} (pago total)`
@@ -726,6 +909,12 @@ export async function resumenDePago(ins: Inscripcion): Promise<{
   venceProximaCuota: string | null;
   /** Lo mínimo que puede declarar el próximo comprobante. */
   montoMinimo: number;
+  /**
+   * El plan más largo de la etapa de esta inscripción (3 en la primera, 4 en
+   * la segunda). Lo usa la interfaz para explicar qué planes faltan y por qué,
+   * y tiene que salir de aquí: el catálogo solo sabe cuál es la etapa abierta.
+   */
+  maxCuotas: number;
 }> {
   const abonos = await abonosDe(ins.id);
   const saldo = saldoDesdeAbonos(ins.total, abonos);
@@ -743,7 +932,7 @@ export async function resumenDePago(ins: Inscripcion): Promise<{
     cuotas && saldo > 0 ? planDeCuotas(ins.total, ins.creadaEn, cuotas) : [];
   const opciones: OpcionDePlan[] =
     !decidido && saldo > 0
-      ? planesViables(ins.creadaEn).map((n) => ({
+      ? planesDe(ins).map((n) => ({
           cuotas: n,
           cuotasDelPlan: planDeCuotas(ins.total, ins.creadaEn, n),
         }))
@@ -754,7 +943,8 @@ export async function resumenDePago(ins: Inscripcion): Promise<{
   // sin revisar ya ocupa su cuota, y decirle que la siguiente vence en el
   // cierre general le movería la fecha que tiene comprometida.
   const siguiente = plan[hechos];
-  const cupo = cuotas ?? maxCuotasViables(ins.creadaEn);
+  const cupo =
+    cuotas ?? maxCuotasViables(ins.creadaEn, etapaDeInscripcion(ins).planes);
 
   return {
     abonos,
@@ -769,6 +959,7 @@ export async function resumenDePago(ins: Inscripcion): Promise<{
     venceProximaCuota:
       siguiente && siguiente.numero > 1 ? siguiente.vence : null,
     montoMinimo: montoMinimoDeAbono(ins, abonos),
+    maxCuotas: Math.max(...etapaDeInscripcion(ins).planes),
   };
 }
 

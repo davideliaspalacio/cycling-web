@@ -167,10 +167,16 @@ export async function corregirInscripcion(params: {
     `${params.hechoPor} corrigió ${cambios.length === 1 ? "1 dato" : `${cambios.length} datos`}: ` +
     `${cambios.map(fraseDeCambio).join("; ")}.` +
     // Cambiar de categoría no recalcula el precio, y eso hay que poder
-    // reconstruirlo: si el total no cuadra con la tarifa de la categoría, es
-    // porque se decidió así aquí.
-    (cambioCategoria && categoria.precio !== ins.total
-      ? ` El total sigue en ${pesos(ins.total)} (la tarifa de ${categoria.nombre} es ${pesos(categoria.precio)}): corregir la categoría no recalcula el precio.`
+    // reconstruirlo: si el total no cuadra con la tarifa, es porque se decidió
+    // así aquí.
+    //
+    // La tarifa que vale es la de SU etapa (`ins.precioBase`), no la del
+    // catálogo: las categorías heredan el precio de la etapa abierta, así que
+    // comparar contra `categoria.precio` le dejaba escrito a un inscrito de la
+    // etapa 1 que su categoría costaba lo de la etapa 2. Y queda escrito para
+    // siempre, en el registro que se lee cuando alguien reclama.
+    (cambioCategoria && ins.precioBase !== ins.total
+      ? ` El total sigue en ${pesos(ins.total)} (la tarifa de su etapa es ${pesos(ins.precioBase)}): corregir la categoría no recalcula el precio.`
       : "") +
     (avisoCategoria ? ` Aviso de categoría aceptado: ${avisoCategoria}` : "") +
     (parecio

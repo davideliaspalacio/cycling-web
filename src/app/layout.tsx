@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import {
   CATEGORIAS,
   EVENTO,
+  MAX_CUOTAS,
   NOMBRE_COMPLETO,
   PRECIO_INSCRIPCION,
 } from "@/lib/catalogo";
@@ -38,11 +39,19 @@ const SITIO = new URL(
   process.env.URL_PUBLICA ?? "https://www.santanderxtreme.com",
 );
 
+/**
+ * Lo que se lee al compartir el enlace por WhatsApp. Es de los textos más
+ * vistos del proyecto, así que ni el precio ni el número de cuotas se escriben
+ * a mano: salen de la etapa abierta (`PRECIO_INSCRIPCION` y `MAX_CUOTAS` siguen
+ * a `ETAPA_ACTIVA`). Cuando la organización abre una etapa, esta frase cambia
+ * sola en vez de quedarse prometiendo "dos o tres cuotas" sobre un plan que ya
+ * admite cuatro.
+ */
 const DESCRIPCION =
   `Maratón de montaña de ${EVENTO.etapas} etapas en ${EVENTO.lugar}, ` +
   `${EVENTO.fechaLegible}. ${CATEGORIAS.length} categorías, ` +
-  `${pesos(PRECIO_INSCRIPCION)}. Inscríbete en cinco pasos y paga de una, ` +
-  `en dos o en tres cuotas.`;
+  `${pesos(PRECIO_INSCRIPCION)}. Inscríbete en cinco pasos y paga de una o ` +
+  `hasta en ${MAX_CUOTAS} cuotas sin recargo.`;
 
 export const metadata: Metadata = {
   metadataBase: SITIO,

@@ -2,11 +2,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { Encabezado, Pie } from "@/components/marco";
 import { Cuenta } from "@/components/hero-altimetria";
+import { KitDeLaInscripcion } from "@/components/kit-de-la-inscripcion";
 import { BotonEnlace, Chip, Tarjeta, TituloSeccion } from "@/components/ui";
 import {
   CATEGORIAS,
   CUENTAS_RECAUDO,
   DIAS_ENTRE_CUOTAS,
+  ETAPA_ACTIVA,
   EVENTO,
   FECHA_LIMITE_ABONOS,
   GRUPOS,
@@ -72,8 +74,8 @@ export default function Inicio() {
             <p className="mt-6 max-w-xl text-lg leading-relaxed text-tinta/75">
               {EVENTO.etapas} etapas de XCM entre los caminos reales, la piedra y el
               calor de {EVENTO.lugar}. Inscribirse debería costar mucho menos
-              esfuerzo que eso: cinco pasos, y pagas de una, en dos o en tres
-              cuotas.
+              esfuerzo que eso: cinco pasos, y pagas de una o hasta en{" "}
+              {MAX_CUOTAS} cuotas.
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -130,20 +132,49 @@ export default function Inicio() {
         </div>
 
         {/* ------------------------------ Cartel ----------------------------- */}
+        {/*
+          Las dos piezas de la etapa 2. Sustituyen al cartel de la etapa 1,
+          que anunciaba un precio y unos cupos que ya no son ciertos.
+
+          Aquí no se escribe ningún valor en texto: el precio vive en «Cómo se
+          paga», derivado del catálogo, para que haya una sola cifra en toda la
+          página y salga siempre del mismo sitio.
+        */}
         <section className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6">
           <TituloSeccion
-            eyebrow="El cartel"
+            eyebrow={`${ETAPA_ACTIVA.nombre} · Inscripciones abiertas`}
             titulo="La convocatoria."
-            bajada={`${pesos(PRECIO_INSCRIPCION)} por las ${EVENTO.etapas} etapas. Guarda el cartel o compártelo para invitar a tu grupo.`}
+            bajada={`${ETAPA_ACTIVA.cupos} cupos para los ${EVENTO.fechaLegible} en ${EVENTO.lugar}. Guarda las piezas o compártelas para invitar a tu grupo.`}
           />
+
+          {/*
+            Cupos, cuotas y descuento salen de `ETAPA_ACTIVA`: abrir la etapa 3
+            tiene que cambiar esta fila sola, sin que nadie se acuerde de venir
+            a editarla. Así se quedó la portada anunciando 150 cupos.
+          */}
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <Chip tono="rio">{EVENTO.fechaLegible}</Chip>
+            <Chip tono="sol">{ETAPA_ACTIVA.cupos} cupos</Chip>
+            {ETAPA_ACTIVA.descuento > 0 && (
+              <Chip tono="turquesa">
+                −{ETAPA_ACTIVA.descuento}% con código de referido
+              </Chip>
+            )}
+            <a
+              href="#pagos"
+              className="raya-mono text-[0.72rem] font-bold uppercase tracking-[0.1em] text-rio underline underline-offset-4"
+            >
+              Ver el valor y las cuotas
+            </a>
+          </div>
 
           <div className="mt-10 grid grid-cols-1 items-start gap-6 sm:grid-cols-2">
             <figure className="tinta animate-rise overflow-hidden rounded-[18px] bg-nube [--rise-rot:-0.8deg]">
               <Image
-                src="/fotos/apertura.jpg"
-                alt={`Cartel de apertura de inscripciones: ${pesos(PRECIO_INSCRIPCION)} y 150 cupos disponibles`}
-                width={1080}
-                height={1350}
+                src="/fotos/etapa2/cupos.jpg"
+                alt={`Pieza de apertura de inscripciones de ${EVENTO.nombre}: ${ETAPA_ACTIVA.nombre}, con los cupos y la fecha de la carrera`}
+                width={1200}
+                height={1200}
                 sizes="(max-width: 640px) 100vw, 50vw"
                 className="h-auto w-full"
               />
@@ -155,31 +186,34 @@ export default function Inicio() {
             </figure>
 
             {/*
-              La foto de carrera hace de contrapeso al cartel: uno dice cuánto
-              cuesta, la otra por qué vale la pena.
+              El alt no repite la cifra de la pieza: la cifra que vale es la
+              del catálogo y se anuncia en «Cómo se paga». Describirla aquí a
+              mano sería escribir el precio dos veces y en dos sitios que
+              pueden dejar de coincidir.
             */}
             <figure
               className="tinta animate-rise overflow-hidden rounded-[18px] bg-nube [--rise-rot:0.8deg]"
               style={{ animationDelay: "0.09s" }}
             >
               <Image
-                src="/fotos/pareja-canon.jpg"
-                alt={`Dos ciclistas subiendo por la carretera del cañón en una edición anterior de ${EVENTO.nombre}`}
-                width={1333}
-                height={2000}
+                src="/fotos/etapa2/valor.jpg"
+                alt={`Pieza del valor de la inscripción de ${ETAPA_ACTIVA.nombre}: pago a cuotas y descuento por inscripción referenciada`}
+                width={1200}
+                height={1200}
                 sizes="(max-width: 640px) 100vw, 50vw"
-                // El cartel no se puede recortar porque lleva texto hasta el
-                // borde; la foto sí, así las dos quedan a la misma altura.
-                className="aspect-[4/5] w-full object-cover object-[center_35%]"
+                className="h-auto w-full"
               />
               <figcaption className="border-t-[3px] border-tinta bg-rio px-4 py-2.5">
                 <p className="raya-mono text-[0.66rem] font-bold uppercase tracking-[0.14em] text-nube">
-                  El pueblo más lindo de Colombia
+                  Valor de la inscripción
                 </p>
               </figcaption>
             </figure>
           </div>
         </section>
+
+        {/* ------------------------------- Kit ------------------------------- */}
+        <KitDeLaInscripcion />
 
         {/* --------------------------- Categorías ---------------------------- */}
         <section
@@ -249,6 +283,28 @@ export default function Inicio() {
               </div>
             ))}
           </div>
+
+          {/*
+            La pieza oficial de categorías, debajo de las tarjetas y no encima:
+            las tarjetas son las que llevan el requisito de cada categoría y
+            las que se pueden pulsar para inscribirse. Esta es para guardar y
+            compartir.
+          */}
+          <figure className="tinta animate-rise mx-auto mt-14 w-full max-w-md overflow-hidden rounded-[18px] bg-nube [--rise-rot:-0.6deg]">
+            <Image
+              src="/fotos/etapa2/categorias.jpg"
+              alt={`Pieza oficial con las ${CATEGORIAS.length} categorías de ${EVENTO.nombre} ${EVENTO.anio}`}
+              width={1200}
+              height={1200}
+              sizes="(max-width: 768px) 100vw, 28rem"
+              className="h-auto w-full"
+            />
+            <figcaption className="border-t-[3px] border-tinta px-4 py-2.5">
+              <p className="raya-mono text-[0.66rem] font-bold uppercase tracking-[0.14em] text-tinta/75">
+                Las {CATEGORIAS.length} categorías, para compartir
+              </p>
+            </figcaption>
+          </figure>
         </section>
 
         {/* ------------------------------ Pagos ------------------------------ */}
@@ -290,7 +346,7 @@ export default function Inicio() {
             </Tarjeta>
 
             <Tarjeta tono="sol" className="flex flex-col gap-4 p-7">
-              <Chip tono="nube">2 o {MAX_CUOTAS} cuotas</Chip>
+              <Chip tono="nube">Hasta {MAX_CUOTAS} cuotas</Chip>
               <p className="font-display text-[2.6rem] font-extrabold leading-none tracking-tight">
                 Desde {pesos(PLANES[PLANES.length - 1].montos[0])}
               </p>

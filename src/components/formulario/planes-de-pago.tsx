@@ -23,11 +23,31 @@ export type PlanOfrecido = {
   cuotasDelPlan: CuotaDelPlan[];
 };
 
+/**
+ * La etapa de inscripción, recortada a lo que necesita el navegador.
+ *
+ * Viaja por props desde un componente de servidor y no se importa del
+ * catálogo: la etapa que manda es la de **esta** inscripción, y el cliente no
+ * tiene por qué saber cuántas etapas hay ni cuál está abierta.
+ */
+export type EtapaVisible = {
+  nombre: string;
+  /** Precio de lista, antes de descuento. */
+  precio: number;
+  /** Porcentaje de descuento por código de referido. 0 = no hay. */
+  descuento: number;
+  /** El plan más largo de esta etapa: 3 en la primera, 4 en la segunda. */
+  maxCuotas: number;
+};
+
 /** El color de cada plan. Fijo por número de cuotas, para que no baile. */
-const TONO: Record<number, "turquesa" | "sol" | "marea"> = {
+const TONO: Record<number, "turquesa" | "sol" | "marea" | "nube"> = {
   1: "turquesa",
   2: "sol",
   3: "marea",
+  // La etapa 2 estrenó el cuarto plan y hacía falta un tono más. `nube` y no
+  // un color nuevo: las clases de color del proyecto están fijadas.
+  4: "nube",
 };
 
 function tituloDePlan(cuotas: number, primera: number): string {
@@ -50,7 +70,11 @@ export function OpcionesDePlan({
   total: number;
 }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div
+      className={`grid gap-4 sm:grid-cols-2 ${
+        opciones.length >= 4 ? "lg:grid-cols-4" : "lg:grid-cols-3"
+      }`}
+    >
       {opciones.map(({ cuotas, cuotasDelPlan }) => {
         const primera = cuotasDelPlan[0];
         const ultima = cuotasDelPlan[cuotasDelPlan.length - 1];
@@ -88,10 +112,16 @@ function OpcionPlan({
   titulo: string;
   monto: string;
   detalle: string;
-  tono: "turquesa" | "sol" | "marea";
+  tono: "turquesa" | "sol" | "marea" | "nube";
 }) {
   const fondo =
-    tono === "turquesa" ? "bg-turquesa" : tono === "sol" ? "bg-sol" : "bg-marea";
+    tono === "turquesa"
+      ? "bg-turquesa"
+      : tono === "sol"
+        ? "bg-sol"
+        : tono === "nube"
+          ? "bg-nube"
+          : "bg-marea";
   return (
     <label
       className={`pulsable flex cursor-pointer flex-col gap-2 rounded-2xl border-[3px] border-tinta p-5 shadow-[5px_5px_0_0_var(--color-tinta)] transition-colors ${

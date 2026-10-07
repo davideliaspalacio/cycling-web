@@ -3,12 +3,15 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import type {
   Abono,
+  CodigoConUsos,
+  CodigoReferido,
   CorreoEnviado,
   CorreoSeguido,
   EstadoEntrega,
   Inscripcion,
   ResumenCorreos,
 } from "../tipos";
+import { CODIGO_ETAPA_HISTORICA } from "../catalogo";
 
 /**
  * Almacén en archivo JSON — el respaldo para cuando no hay DATABASE_URL.
@@ -23,6 +26,7 @@ const DIR = path.join(process.cwd(), ".datos");
 const ARCHIVO_INSCRIPCIONES = path.join(DIR, "inscripciones.json");
 const ARCHIVO_CORREOS = path.join(DIR, "correos.json");
 const ARCHIVO_ABONOS = path.join(DIR, "abonos.json");
+const ARCHIVO_CODIGOS = path.join(DIR, "codigos.json");
 
 type Tabla<T> = { registros: T[] };
 
@@ -50,9 +54,29 @@ async function escribir<T>(archivo: string, tabla: Tabla<T>): Promise<void> {
 
 /* ---------------------------------- Inscripciones --------------------------------- */
 
+/**
+ * Rellena lo que un archivo escrito antes de las etapas no trae.
+ *
+ * Mismo criterio que en Postgres: la etapa de respaldo es la **primera** y no
+ * la activa —un registro viejo es de la etapa 1, y suponer la activa le
+ * cambiaría los planes de pago—, y el precio de lista se deduce de lo que debe
+ * más lo que se le descontó. Nada de esto reescribe el archivo: es al leer.
+ */
+function hidratar(ins: Inscripcion): Inscripcion {
+  const descuento = ins.descuento ?? 0;
+  return {
+    ...ins,
+    etapa: ins.etapa ?? CODIGO_ETAPA_HISTORICA,
+    descuento,
+    precioBase: ins.precioBase ?? ins.total + descuento,
+  };
+}
+
 export async function listarInscripciones(): Promise<Inscripcion[]> {
   const { registros } = await leer<Inscripcion>(ARCHIVO_INSCRIPCIONES);
-  return registros.sort((a, b) => b.creadaEn.localeCompare(a.creadaEn));
+  return registros
+    .map(hidratar)
+    .sort((a, b) => b.creadaEn.localeCompare(a.creadaEn));
 }
 
 export async function guardarInscripcion(
@@ -74,12 +98,14 @@ export async function inscripcionPorReferencia(
 ): Promise<Inscripcion | undefined> {
   const { registros } = await leer<Inscripcion>(ARCHIVO_INSCRIPCIONES);
   const base = referencia.split("-").slice(0, 2).join("-").toUpperCase();
-  return registros.find((r) => r.referencia === base);
+  const fila = registros.find((r) => r.referencia === base);
+  return fila && hidratar(fila);
 }
 
 export async function inscripcionPorId(id: string): Promise<Inscripcion | undefined> {
   const { registros } = await leer<Inscripcion>(ARCHIVO_INSCRIPCIONES);
-  return registros.find((r) => r.id === id);
+  const fila = registros.find((r) => r.id === id);
+  return fila && hidratar(fila);
 }
 
 /** Búsqueda del portal del ciclista: documento + correo. */
@@ -88,22 +114,24 @@ export async function buscarInscripcion(
   correo: string,
 ): Promise<Inscripcion | undefined> {
   const { registros } = await leer<Inscripcion>(ARCHIVO_INSCRIPCIONES);
-  return registros.find(
+  const fila = registros.find(
     (r) =>
       r.ciclista.identificacion.trim() === identificacion.trim() &&
       r.ciclista.correo.trim().toLowerCase() === correo.trim().toLowerCase(),
   );
+  return fila && hidratar(fila);
 }
 
 export async function inscripcionDuplicada(
   identificacion: string,
 ): Promise<Inscripcion | undefined> {
   const { registros } = await leer<Inscripcion>(ARCHIVO_INSCRIPCIONES);
-  return registros.find(
+  const fila = registros.find(
     (r) =>
       r.ciclista.identificacion.trim() === identificacion.trim() &&
       r.estado !== "BORRADOR",
   );
+  return fila && hidratar(fila);
 }
 
 /**
@@ -409,4 +437,112 @@ export async function resumenCorreos(desde: string): Promise<ResumenCorreos> {
     noSalieron: cuenta((c) => c.proveedor === "sin-configurar"),
     simulados: cuenta((c) => c.proveedor === "simulacion"),
   };
+}
+
+/* --------------------------- Códigos de referido --------------------------- */
+
+/**
+ * Misma interfaz que en Postgres, con las mismas reglas: el código llega ya
+ * normalizado, se desactiva en vez de borrarse, y borrar solo se admite sin
+ * usos. Lo que no hay aquí es atomicidad de verdad —`enFila` serializa las
+ * escrituras de este proceso y nada más—, que es la razón de siempre para no
+ * usar este almacén en producción.
+ */
+
+export async function codigoPorTexto(
+  codigo: string,
+): Promise<CodigoReferido | undefined> {
+  const { registros } = await leer<CodigoReferido>(ARCHIVO_CODIGOS);
+  return registros.find((c) => c.codigo === codigo);
+}
+
+export async function listarCodigos(): Promise<CodigoConUsos[]> {
+  const [{ registros }, inscripciones] = await Promise.all([
+    leer<CodigoReferido>(ARCHIVO_CODIGOS),
+    listarInscripciones(),
+  ]);
+  return registros
+    .slice()
+    .sort(
+      (a, b) =>
+        Number(b.activo) - Number(a.activo) ||
+        b.creadoEn.localeCompare(a.creadoEn),
+    )
+    .map((c) => ({
+      ...c,
+      inscripciones: inscripciones
+        .filter((i) => i.codigoReferido === c.codigo)
+        .map((i) => ({
+          referencia: i.referencia,
+          nombres: i.ciclista.nombres,
+          apellidos: i.ciclista.apellidos,
+          creadaEn: i.creadaEn,
+          descuento: i.descuento ?? 0,
+          total: i.total,
+        })),
+    }));
+}
+
+export async function crearCodigo(params: {
+  codigo: string;
+  propietario: string;
+  creadoPor: string;
+}): Promise<CodigoReferido | null> {
+  return enFila(async () => {
+    const tabla = await leer<CodigoReferido>(ARCHIVO_CODIGOS);
+    if (tabla.registros.some((c) => c.codigo === params.codigo)) return null;
+    const nuevo: CodigoReferido = {
+      codigo: params.codigo,
+      propietario: params.propietario,
+      activo: true,
+      usos: 0,
+      creadoEn: new Date().toISOString(),
+      creadoPor: params.creadoPor,
+    };
+    tabla.registros.push(nuevo);
+    await escribir(ARCHIVO_CODIGOS, tabla);
+    return nuevo;
+  });
+}
+
+export async function cambiarActivoCodigo(
+  codigo: string,
+  activo: boolean,
+): Promise<CodigoReferido | undefined> {
+  return enFila(async () => {
+    const tabla = await leer<CodigoReferido>(ARCHIVO_CODIGOS);
+    const c = tabla.registros.find((x) => x.codigo === codigo);
+    if (!c) return undefined;
+    c.activo = activo;
+    await escribir(ARCHIVO_CODIGOS, tabla);
+    return c;
+  });
+}
+
+export async function sumarUsoDeCodigo(
+  codigo: string,
+): Promise<CodigoReferido | null> {
+  return enFila(async () => {
+    const tabla = await leer<CodigoReferido>(ARCHIVO_CODIGOS);
+    const c = tabla.registros.find((x) => x.codigo === codigo);
+    if (!c || !c.activo) return null;
+    c.usos += 1;
+    await escribir(ARCHIVO_CODIGOS, tabla);
+    return c;
+  });
+}
+
+export async function borrarCodigo(
+  codigo: string,
+): Promise<"BORRADO" | "CON_USOS" | "NO_EXISTE"> {
+  const inscripciones = await listarInscripciones();
+  if (inscripciones.some((i) => i.codigoReferido === codigo)) return "CON_USOS";
+  return enFila(async () => {
+    const tabla = await leer<CodigoReferido>(ARCHIVO_CODIGOS);
+    const antes = tabla.registros.length;
+    tabla.registros = tabla.registros.filter((c) => c.codigo !== codigo);
+    if (tabla.registros.length === antes) return "NO_EXISTE";
+    await escribir(ARCHIVO_CODIGOS, tabla);
+    return "BORRADO";
+  });
 }

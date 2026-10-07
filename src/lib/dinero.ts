@@ -4,7 +4,6 @@ import {
   DIA_DE_COBRO,
   FECHA_LIMITE_ABONOS,
   MARGEN_MINIMO_CUOTAS,
-  PLANES_DE_CUOTAS,
 } from "./catalogo";
 import type { Abono, Cuota, EstadoInscripcion, PlanPago } from "./tipos";
 
@@ -25,6 +24,11 @@ export function pesos(valor: number): string {
  * Sobrevive al retiro de la pasarela porque es lo que parte el precio en las
  * cuotas del plan: 380.000 en 2 → 190.000 · 190.000, y en 3 → 127.000 ·
  * 127.000 · 126.000. (Con la pasarela era 380.000 en 4 → 95.000 × 4.)
+ *
+ * Reparte en N exacto sea cual sea el precio, que es lo que hace que la etapa 2
+ * no necesite nada nuevo: 470.000 en 4 → 118.000 · 118.000 · 117.000 ·
+ * 117.000, y con el 10% de descuento 423.000 en 4 → 106.000 · 106.000 ·
+ * 106.000 · 105.000. En los dos casos la suma es el total al peso.
  */
 export function repartirEnCuotas(total: number, n = CUOTAS_DEL_PLAN): number[] {
   const base = Math.floor(total / n / 1000) * 1000;
@@ -42,6 +46,32 @@ export function repartirEnCuotas(total: number, n = CUOTAS_DEL_PLAN): number[] {
 
 function isoFecha(d: Date): string {
   return d.toISOString().slice(0, 10);
+}
+
+/* ---------------------------- El descuento ---------------------------------- */
+
+/**
+ * Cuánto se rebaja un precio con un porcentaje de descuento, en pesos.
+ *
+ * Trunca al millar porque en este proyecto todo el dinero va en miles de
+ * pesos: así el total rebajado se parte en cuotas de cifras redondas y nadie
+ * ve una cuota de 105.750. Con los números reales no cambia nada —470.000 al
+ * 10% son 47.000 exactos—, pero deja la regla escrita para el día que el
+ * porcentaje no sea tan cómodo.
+ *
+ * Trunca hacia abajo y no al millar más cercano a propósito: redondear hacia
+ * arriba regala hasta 999 pesos por inscripción, y con doscientas cincuenta
+ * inscripciones eso es dinero de la organización. Un 7% de 470.000 son 32.900,
+ * y aquí se descuentan 32.000, no 33.000. Donde hay que ser exacto es en el
+ * reparto en cuotas, que sí suma el total al peso.
+ *
+ * El resultado es lo que se guarda en `ins.descuento`: **pesos, no
+ * porcentaje**. Si mañana el 10% cambia, lo que ya se cobró no se mueve.
+ */
+export function descuentoEnPesos(precio: number, porcentaje: number): number {
+  if (porcentaje <= 0 || precio <= 0) return 0;
+  const bruto = (precio * porcentaje) / 100;
+  return Math.min(precio, Math.floor(bruto / 1000) * 1000);
 }
 
 /* --------------------------- Los planes de cuotas -------------------------- */
@@ -110,14 +140,29 @@ export function cabePlanDeCuotas(
   );
 }
 
-/** Los planes que se le pueden ofrecer a quien se inscribe hoy. Siempre trae el de 1. */
-export function planesViables(hoy: string | Date = new Date()): number[] {
-  return PLANES_DE_CUOTAS.filter((n) => cabePlanDeCuotas(n, hoy));
+/**
+ * De los planes de una etapa, los que todavía caben a esta fecha. Siempre trae
+ * el de 1.
+ *
+ * `planes` es obligatorio y no tiene respaldo a propósito. Los planes son una
+ * propiedad de la **etapa de la inscripción** (`etapaDeInscripcion(ins).planes`),
+ * no del catálogo vigente: una inscripción de la etapa 1 sigue con 1–3 aunque
+ * la etapa activa ya ofrezca 4. Un valor por defecto aquí era la forma fácil de
+ * colarle un cuarto plan a quien se inscribió en la primera etapa.
+ */
+export function planesViables(
+  hoy: string | Date,
+  planes: readonly number[],
+): number[] {
+  return planes.filter((n) => cabePlanDeCuotas(n, hoy));
 }
 
 /** El plan más largo que todavía cabe. Es el que fija el mínimo del primer comprobante. */
-export function maxCuotasViables(hoy: string | Date = new Date()): number {
-  const viables = planesViables(hoy);
+export function maxCuotasViables(
+  hoy: string | Date,
+  planes: readonly number[],
+): number {
+  const viables = planesViables(hoy, planes);
   return viables[viables.length - 1] ?? 1;
 }
 
@@ -178,6 +223,8 @@ export function proximaCuotaDelPlan(
  */
 export function cuotasDelPlan(plan: PlanPago): number {
   switch (plan) {
+    case "ABONOS_4":
+      return 4;
     case "ABONOS_3":
       return 3;
     case "ABONOS_2":
@@ -188,9 +235,33 @@ export function cuotasDelPlan(plan: PlanPago): number {
   }
 }
 
+/**
+ * Cómo se nombra un plan en pantalla.
+ *
+ * Estaba copiado en /panel y en la ficha del inscrito, y al estrenar el cuarto
+ * plan las dos copias se quedaron cortas a la vez. Vive aquí, junto a
+ * `cuotasDelPlan`, que es el otro sitio que conoce esta correspondencia.
+ */
+const TEXTO_PLAN: Record<PlanPago, string> = {
+  CONTADO: "Contado (tarjeta · histórico)",
+  CUOTAS: "Cuotas (tarjeta · histórico)",
+  TOTAL: "Pago total",
+  // `ABONOS` a secas es el valor histórico de cuando el único plan diferido
+  // eran dos cuotas; sigue queriendo decir eso.
+  ABONOS: "Dos cuotas",
+  ABONOS_2: "Dos cuotas",
+  ABONOS_3: "Tres cuotas",
+  ABONOS_4: "Cuatro cuotas",
+};
+
+export function textoDePlan(plan: PlanPago): string {
+  return TEXTO_PLAN[plan] ?? plan;
+}
+
 /** El valor que se guarda en `plan` para un plan de `cuotas` cuotas. */
 export function planPagoDeCuotas(cuotas: number): PlanPago {
-  if (cuotas >= 3) return "ABONOS_3";
+  if (cuotas >= 4) return "ABONOS_4";
+  if (cuotas === 3) return "ABONOS_3";
   if (cuotas === 2) return "ABONOS_2";
   return "TOTAL";
 }

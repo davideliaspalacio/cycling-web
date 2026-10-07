@@ -4,6 +4,8 @@ import {
   PRENDAS,
   TALLAS,
   categoriaPorCodigo,
+  etapaDeInscripcion,
+  etapaPorCodigo,
 } from "./catalogo";
 import { edadEnCarrera } from "./validacion";
 import type { EstadoInscripcion, Inscripcion } from "./tipos";
@@ -202,6 +204,12 @@ const CONSTRUCTORES: Record<VistaExport, Constructor> = {
       "Teléfono de emergencia",
       ...PRENDAS.map((p) => p.nombre),
       "Referido por",
+      // La etapa y su precio van juntos y antes del total: son lo que explica
+      // por qué dos inscritos con el mismo estado deben cifras distintas.
+      "Etapa",
+      "Precio de la etapa",
+      "Código de referido",
+      "Descuento",
       "Total",
       "Pagado",
       "Saldo",
@@ -233,6 +241,10 @@ const CONSTRUCTORES: Record<VistaExport, Constructor> = {
           celdaTexto(c.telefonoEmergencia),
           ...PRENDAS.map((p) => celda(i.tallas[p.campo])),
           celda(c.referidoPor),
+          celda(etapaDeInscripcion(i).nombre),
+          celdaNumero(i.precioBase),
+          celda(i.codigoReferido ?? ""),
+          celdaNumero(i.descuento),
           celdaNumero(i.total),
           celdaNumero(i.pagado),
           celdaNumero(Math.max(0, i.total - i.pagado)),
@@ -257,6 +269,7 @@ const CONSTRUCTORES: Record<VistaExport, Constructor> = {
       "Categoría",
       "Ciudad",
       "Departamento",
+      "Etapa",
       // Va a propósito: quien arma la salida necesita saber a quién no puede
       // darle dorsal todavía.
       "Estado de pago",
@@ -275,6 +288,7 @@ const CONSTRUCTORES: Record<VistaExport, Constructor> = {
           celda(nombreDeCategoria(i)),
           celda(c.ciudad),
           celda(c.departamento),
+          celda(etapaDeInscripcion(i).nombre),
           celda(ESTADO_LEGIBLE[i.estado]),
         ];
       }),
@@ -371,7 +385,13 @@ export function esEstadoInscripcion(valor: unknown): valor is EstadoInscripcion 
 export type FiltrosExport = {
   categoria?: string;
   estado?: EstadoInscripcion;
+  /** Código de etapa. Las filas sin etapa cuentan como de la primera. */
+  etapa?: string;
 };
+
+export function esEtapa(valor: unknown): valor is string {
+  return typeof valor === "string" && Boolean(etapaPorCodigo(valor));
+}
 
 export function filtrar(
   inscripciones: Inscripcion[],
@@ -380,7 +400,10 @@ export function filtrar(
   return inscripciones.filter(
     (i) =>
       (!filtros.categoria || i.categoriaCodigo === filtros.categoria) &&
-      (!filtros.estado || i.estado === filtros.estado),
+      (!filtros.estado || i.estado === filtros.estado) &&
+      // Por `etapaDeInscripcion` y no por `i.etapa` a pelo: una fila anterior
+      // a la columna es de la etapa 1 y tiene que salir al filtrar por ella.
+      (!filtros.etapa || etapaDeInscripcion(i).codigo === filtros.etapa),
   );
 }
 
@@ -402,6 +425,7 @@ function nombreDeArchivo(vista: VistaExport, filtros: FiltrosExport): string {
   const partes = [
     EVENTO.prefijoReferencia.toLowerCase(),
     vista,
+    filtros.etapa?.toLowerCase().replace(/_/g, "-"),
     filtros.categoria?.toLowerCase(),
     filtros.estado?.toLowerCase().replace(/_/g, "-"),
     new Date().toISOString().slice(0, 10),

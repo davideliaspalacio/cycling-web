@@ -39,6 +39,47 @@ ALTER TABLE inscripciones DROP CONSTRAINT IF EXISTS inscripciones_medio_pago_che
 ALTER TABLE inscripciones ADD CONSTRAINT inscripciones_medio_pago_check
   CHECK (medio_pago IN ('WOMPI','TRANSFERENCIA'));
 
+/* ------------------------- Etapas de inscripción --------------------------- */
+--
+-- La etapa 2 abre con otro precio (470.000 en vez de 380.000), otros cupos y
+-- un plan más de cuotas. Eso obliga a que **cada inscripción recuerde su
+-- etapa y su precio**: si el saldo se calculara desde la tarifa vigente, abrir
+-- la etapa 2 le subiría la deuda a las 142 personas que entraron en la 1, y 95
+-- de ellas están a mitad de un plan de cuotas.
+--
+-- El DEFAULT es lo que deja intactas esas filas: todas son de la etapa 1, su
+-- `total` ya está guardado y nada de esto lo toca.
+--
+-- Sin CHECK a propósito: la lista de etapas vive en `src/lib/catalogo.ts` y
+-- abrir una tercera no debería exigir tocar el esquema.
+ALTER TABLE inscripciones
+  ADD COLUMN IF NOT EXISTS etapa text NOT NULL DEFAULT 'ETAPA_1';
+
+-- Precio de lista de su etapa el día que se inscribió, antes del descuento.
+-- `total` es lo que debe de verdad; esto es la constancia de sobre qué cifra
+-- se calculó. Nullable: en las filas que ya existen se deduce como
+-- `total + descuento` (380.000 + 0), que es exactamente lo que valían.
+ALTER TABLE inscripciones
+  ADD COLUMN IF NOT EXISTS precio_base integer CHECK (precio_base IS NULL OR precio_base >= 0);
+
+-- Qué código de referido usó. Texto y no clave ajena: si alguien borrara un
+-- código, la inscripción tiene que seguir diciendo de dónde salió su
+-- descuento. Por eso los códigos se desactivan y solo se borran sin usos.
+ALTER TABLE inscripciones
+  ADD COLUMN IF NOT EXISTS codigo_referido text;
+
+-- Cuánto se le descontó, EN PESOS y no en porcentaje. Si mañana el 10% cambia,
+-- lo que ya se cobró no se puede mover; guardar el porcentaje lo recalcularía.
+ALTER TABLE inscripciones
+  ADD COLUMN IF NOT EXISTS descuento integer NOT NULL DEFAULT 0 CHECK (descuento >= 0);
+
+-- Las dos preguntas nuevas del panel: cuántos cupos van por etapa, y quién usó
+-- cada código.
+CREATE INDEX IF NOT EXISTS inscripciones_etapa_idx ON inscripciones (etapa);
+
+CREATE INDEX IF NOT EXISTS inscripciones_codigo_referido_idx
+  ON inscripciones (codigo_referido) WHERE codigo_referido IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS inscripciones_documento_idx
   ON inscripciones ((ciclista ->> 'identificacion'));
 
@@ -111,9 +152,12 @@ CREATE TABLE IF NOT EXISTS abonos (
   motivo_rechazo    text
 );
 
+-- El tope es el plan más largo de cualquier etapa: la 1 llega a 3 cuotas y la
+-- 2 a 4, y un comprobante es una cuota. El límite real de cada inscripción es
+-- el de SU plan y lo hace cumplir `registrarAbono`; esto es solo la red.
 ALTER TABLE abonos DROP CONSTRAINT IF EXISTS abonos_numero_check;
 ALTER TABLE abonos ADD CONSTRAINT abonos_numero_check
-  CHECK (numero >= 1 AND numero <= 3);
+  CHECK (numero >= 1 AND numero <= 4);
 
 ALTER TABLE abonos DROP CONSTRAINT IF EXISTS abonos_canal_check;
 ALTER TABLE abonos ADD CONSTRAINT abonos_canal_check
@@ -224,3 +268,35 @@ CREATE INDEX IF NOT EXISTS correos_estado_entrega_idx
 -- Los rebotes son lo que dispara trabajo humano: se listan solos y a menudo.
 CREATE INDEX IF NOT EXISTS correos_rebotados_idx
   ON correos (rebotado_en DESC) WHERE rebotado_en IS NOT NULL;
+
+/* --------------------------- Códigos de referido --------------------------- */
+--
+-- Los embajadores traen ciclistas; en la etapa 2 cada código da un 10% de
+-- descuento. El porcentaje NO vive aquí: vive en la etapa
+-- (`src/lib/catalogo.ts`), porque así lo pidió la organización —es una
+-- condición de la etapa, no un acuerdo por embajador— y porque un solo número
+-- no se puede desincronizar. Lo que sí vive en la inscripción es el descuento
+-- en pesos, así que cambiar el porcentaje nunca mueve lo ya cobrado.
+--
+-- El código es la clave primaria: es lo que se escribe, lo que se dicta por
+-- WhatsApp y lo que guarda la inscripción. Por eso un código **se desactiva,
+-- no se borra**: borrar uno que ya usaron veinte personas dejaría esas
+-- inscripciones apuntando al vacío y se perdería de dónde salió el descuento.
+-- Borrar solo se admite cuando no tiene ningún uso, y eso lo comprueba
+-- `borrarCodigo` contra `inscripciones`.
+CREATE TABLE IF NOT EXISTS codigos_referido (
+  codigo      text        PRIMARY KEY,
+  propietario text        NOT NULL,
+  activo      boolean     NOT NULL DEFAULT true,
+  -- Cuántas veces se aplicó, según el registro. La cifra que manda en el panel
+  -- es cuántas inscripciones apuntan al código; este contador existe para que
+  -- una diferencia se pueda ver en vez de quedar escondida.
+  usos        integer     NOT NULL DEFAULT 0 CHECK (usos >= 0),
+  creado_en   timestamptz NOT NULL DEFAULT now(),
+  creado_por  text        NOT NULL
+);
+
+-- El listado del panel: primero los activos, y dentro de cada grupo el más
+-- reciente arriba.
+CREATE INDEX IF NOT EXISTS codigos_referido_activo_idx
+  ON codigos_referido (activo, creado_en DESC);

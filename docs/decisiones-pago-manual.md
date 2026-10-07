@@ -5,20 +5,90 @@ El documento del cliente no fija todas estas reglas. Las que llevan
 son de una línea. Las §1 y §2 ya no son de esas: **son lo que pidió la
 organización.**
 
-## 1. Tres planes: 1, 2 o 3 cuotas (confirmado por el cliente)
+## 1. Los planes de cuotas los fija la etapa (confirmado por el cliente)
 
 Reemplaza al esquema anterior de "hasta 3 abonos de monto libre". Se retira
-también el plan de 4 cuotas del día 5 de la pasarela: **nadie cobra
+también el calendario de cobro del día 5 de la pasarela: **nadie cobra
 automáticamente**, así que un calendario de cobro no representa nada real.
 
-`PLANES_DE_CUOTAS = [1, 2, 3]`, y el número de cuotas es a la vez el de
+Con la apertura de la segunda etapa, los planes dejaron de ser una constante
+global y pasaron a ser **una propiedad de la etapa** (`ETAPAS` en
+`src/lib/catalogo.ts`). El número de cuotas sigue siendo a la vez el de
 comprobantes: uno por cuota.
 
-| Cuotas | Montos |
-| --- | --- |
-| 1 | $380.000 |
-| 2 | $190.000 · $190.000 |
-| 3 | $127.000 · $127.000 · $126.000 |
+| | Etapa 1 «Creyentes» | Etapa 2 |
+| --- | --- | --- |
+| Precio | $380.000 | $470.000 |
+| Cupos | 150 | 250 |
+| Planes | 1, 2 o 3 cuotas | 1, 2, 3 o 4 cuotas |
+| Descuento por referido | — | 10% |
+
+| Cuotas | Etapa 1 · $380.000 | Etapa 2 · $470.000 | Etapa 2 con 10% · $423.000 |
+| --- | --- | --- | --- |
+| 1 | $380.000 | $470.000 | $423.000 |
+| 2 | $190.000 · $190.000 | $235.000 · $235.000 | $212.000 · $211.000 |
+| 3 | $127.000 · $127.000 · $126.000 | $157.000 · $157.000 · $156.000 | $141.000 · $141.000 · $141.000 |
+| 4 | — (no existe en esta etapa) | $118.000 · $118.000 · $117.000 · $117.000 | $106.000 · $106.000 · $106.000 · $105.000 |
+
+### Cada inscripción recuerda su etapa y su precio
+
+Es la regla de la que depende todo lo demás. Las 142 inscripciones de la etapa
+1 valen $380.000 y 95 de ellas están a mitad de un plan de cuotas: si el saldo
+o los montos de cuota salieran de la tarifa vigente, abrir la etapa 2 les
+subiría la deuda retroactivamente.
+
+Por eso la inscripción guarda `etapa` y `precio_base`, y **todo lo que calcula
+dinero sale de `ins.total`**, nunca de `PRECIO_INSCRIPCION`. Los planes
+disponibles salen de `etapaDeInscripcion(ins).planes` y no de
+`PLANES_DE_CUOTAS`: `planesViables` exige la lista de planes como parámetro
+obligatorio, sin valor por defecto, precisamente para que ningún sitio pueda
+preguntar por descuido "¿qué planes hay?" en vez de "¿qué planes tiene esta
+inscripción?".
+
+`PRECIO_INSCRIPCION`, `PLANES_DE_CUOTAS` y `MAX_CUOTAS` siguen existiendo y
+ahora significan "los de la etapa abierta". Son para la portada, los
+metadatos y el formulario de quien se inscribe ahora. Nada que calcule un
+saldo puede usarlos.
+
+El valor `ABONOS_4` de `plan` es nuevo y solo lo escriben inscripciones de la
+etapa 2; la traducción sigue viviendo en un solo sitio, `cuotasDelPlan`.
+
+## 1 bis. El descuento por referido vive en la etapa, no en el código
+
+La organización lo pidió como una condición de la etapa 2 («10% con código de
+referido»), no como un acuerdo distinto por embajador. Así que el porcentaje
+está en `ETAPAS[].descuento` y la tabla `codigos_referido` solo dice **quién
+tiene qué código y si está vigente**.
+
+Gana dos cosas: un solo número que cambiar, y ningún riesgo de que veinte
+códigos se desincronicen entre ellos. Si algún día hace falta un porcentaje por
+código, la tabla admite una columna nueva con `DEFAULT NULL` que signifique
+"usa el de la etapa", y nada de lo de arriba cambia.
+
+Lo que podría dar miedo —que tocar el porcentaje mueva lo ya cobrado— no puede
+pasar: **la inscripción guarda el descuento en pesos** (`descuento`), no el
+porcentaje. El porcentaje solo decide lo que se le aplica a quien se inscribe
+en ese momento.
+
+### Un código inválido no tumba la inscripción
+
+Un código mal escrito, desactivado o puesto en una etapa sin descuento no es un
+error del formulario: se avisa y la inscripción sigue adelante al precio de
+lista. El ciclista ya llenó cinco pasos; devolverle un 422 por una errata en un
+campo opcional le costaría el cupo por nada. Queda anotado en la bitácora
+(`descuento-no-aplicado`) para poder contestarle si reclama.
+
+### Los códigos se desactivan, no se borran
+
+Una inscripción guarda el **texto** del código, no una clave ajena. Borrar un
+código que ya usaron veinte personas dejaría esas veinte inscripciones con un
+descuento sin procedencia: se vería que pagaron menos y no por qué, que es
+justo lo que se pregunta al liquidarle la comisión a un embajador.
+
+`activo = false` deja de aplicarlo a las nuevas y conserva el rastro de las
+viejas. Borrar solo se admite cuando el código no tiene ningún uso, y la
+comprobación va dentro del propio `DELETE` (`NOT EXISTS`), no en un `SELECT`
+previo: entre las dos sentencias cabría una inscripción nueva con ese código.
 
 **El pago total es el plan de una cuota.** No es un camino aparte: internamente
 es el mismo modelo con `n = 1`, y solo la interfaz lo nombra "pago total". Fue

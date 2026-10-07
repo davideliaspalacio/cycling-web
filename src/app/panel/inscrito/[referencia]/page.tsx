@@ -8,17 +8,17 @@ import {
   PRENDAS,
   categoriaPorCodigo,
   cuentaDeCanal,
+  etapaDeInscripcion,
 } from "@/lib/catalogo";
 import { estadoVisible, nombreDePlantilla } from "@/lib/correos/seguimiento";
 import { HAY_WEBHOOK } from "@/lib/correos/webhook";
-import { fechaLarga, pesos } from "@/lib/dinero";
+import { fechaLarga, pesos, textoDePlan } from "@/lib/dinero";
 import { resumenDePago } from "@/lib/servicio";
 import type {
   Abono,
   EstadoAbono,
   EstadoInscripcion,
   Inscripcion,
-  PlanPago,
 } from "@/lib/tipos";
 import { avisoDeCategoria, edadEnCarrera } from "@/lib/validacion";
 
@@ -70,15 +70,6 @@ const TEXTO_ESTADO: Record<EstadoInscripcion, string> = {
   COMPLETA: "Completa",
 };
 
-const PLAN: Record<PlanPago, string> = {
-  CONTADO: "Contado (tarjeta · histórico)",
-  CUOTAS: "Cuotas (tarjeta · histórico)",
-  TOTAL: "Pago total",
-  ABONOS: "Dos cuotas",
-  ABONOS_2: "Dos cuotas",
-  ABONOS_3: "Tres cuotas",
-};
-
 const TEXTO_ABONO: Record<EstadoAbono, string> = {
   ENVIADA: "Sin revisar",
   EN_REVISION: "En revisión",
@@ -99,6 +90,8 @@ const TONO_ABONO: Record<EstadoAbono, "turquesa" | "sol" | "alerta" | "marea"> =
  */
 const TEXTO_EVENTO: Record<string, string> = {
   creada: "Se inscribió",
+  "descuento-aplicado": "Descuento por referido",
+  "descuento-no-aplicado": "Código de referido sin aplicar",
   "abono-recibido": "Subió un comprobante",
   "abono-verificado": "Comprobante verificado",
   "abono-rechazado": "Comprobante rechazado",
@@ -265,6 +258,9 @@ export default async function FichaDelInscrito({
   ]);
 
   const categoria = categoriaPorCodigo(ins.categoriaCodigo);
+  // La etapa en la que entró. No es la abierta hoy: es la que fija su precio y
+  // sus planes de cuotas, y la que explica por qué debe lo que debe.
+  const etapa = etapaDeInscripcion(ins);
   const c = ins.ciclista;
   const edad = c.fechaNacimiento ? edadEnCarrera(c.fechaNacimiento) : null;
   // El mismo aviso que ve el ciclista al inscribirse. Si su categoría no le
@@ -292,7 +288,8 @@ export default async function FichaDelInscrito({
         <div className="mt-5 flex flex-wrap items-center gap-2">
           <Chip tono={TONO_ESTADO[ins.estado]}>{TEXTO_ESTADO[ins.estado]}</Chip>
           <Chip tono="nube">{categoria?.nombre ?? ins.categoriaCodigo}</Chip>
-          <Chip tono="nube">{PLAN[ins.plan]}</Chip>
+          <Chip tono="nube">Etapa {etapa.nombre}</Chip>
+          <Chip tono="nube">{textoDePlan(ins.plan)}</Chip>
           <span className="raya-mono text-[0.7rem] text-tinta/75">
             Se inscribió el {cuando(ins.creadaEn)}
           </span>
@@ -401,6 +398,21 @@ export default async function FichaDelInscrito({
               valor={c.referidoPor}
               vacio="Nadie: llegó por su cuenta"
             />
+            <Dato
+              etiqueta="Código de referido"
+              valor={ins.codigoReferido}
+              vacio="No usó ninguno"
+            />
+            {ins.codigoReferido && (
+              <p className="mt-3">
+                <Link
+                  href={`/panel/codigos?q=${encodeURIComponent(ins.codigoReferido)}`}
+                  className="font-mono text-[0.7rem] font-bold uppercase tracking-[0.14em] text-rio hover:underline"
+                >
+                  Ver el código {ins.codigoReferido} y quién más lo usó →
+                </Link>
+              </p>
+            )}
             {aviso && (
               <p className="mt-3 rounded-2xl border-[3px] border-tinta bg-alerta px-4 py-3 text-[0.85rem] font-bold leading-relaxed text-nube">
                 Ojo con la categoría: {aviso}
@@ -417,7 +429,11 @@ export default async function FichaDelInscrito({
           >
             <div className="grid gap-x-8 sm:grid-cols-2">
               <div>
-                <Dato etiqueta="Plan" valor={PLAN[ins.plan]} />
+                <Dato
+                  etiqueta="Etapa"
+                  valor={`${etapa.nombre} · hasta ${Math.max(...etapa.planes)} cuota${Math.max(...etapa.planes) === 1 ? "" : "s"}`}
+                />
+                <Dato etiqueta="Plan" valor={textoDePlan(ins.plan)} />
                 <Dato
                   etiqueta="En cuántas cuotas quedó"
                   valor={pago.cuotas ? `${pago.cuotas}` : null}
@@ -433,7 +449,28 @@ export default async function FichaDelInscrito({
                 />
               </div>
               <div>
-                <Dato etiqueta="Total de la inscripción" valor={pesos(ins.total)} />
+                {/*
+                  El precio al que entró, y no la tarifa de hoy: es la cifra
+                  sobre la que se le calcularon las cuotas y la que hay que
+                  poder enseñarle si reclama.
+                */}
+                <Dato
+                  etiqueta="Precio de su etapa"
+                  valor={pesos(ins.precioBase)}
+                />
+                {ins.descuento > 0 && (
+                  <Dato
+                    etiqueta="Descuento aplicado"
+                    valor={`−${pesos(ins.descuento)}${
+                      ins.codigoReferido ? ` · ${ins.codigoReferido}` : ""
+                    }`}
+                  />
+                )}
+                <Dato
+                  etiqueta="Total de la inscripción"
+                  valor={pesos(ins.total)}
+                  destacado
+                />
                 <Dato etiqueta="Pagado y verificado" valor={pesos(pago.verificado)} />
                 <Dato etiqueta="Saldo" valor={pesos(pago.saldo)} destacado />
                 {pago.excedente > 0 && (

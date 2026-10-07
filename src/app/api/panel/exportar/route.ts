@@ -4,6 +4,7 @@ import { categoriaPorCodigo } from "@/lib/catalogo";
 import {
   construirCsv,
   esEstadoInscripcion,
+  esEtapa,
   esVista,
   type FiltrosExport,
 } from "@/lib/exportacion";
@@ -60,9 +61,18 @@ export async function GET(peticion: NextRequest) {
     );
   }
 
+  const etapa = parametros.get("etapa") ?? undefined;
+  if (etapa && !esEtapa(etapa)) {
+    return NextResponse.json(
+      { error: `No existe la etapa «${etapa}».` },
+      { status: 400 },
+    );
+  }
+
   const filtros: FiltrosExport = {
     categoria,
     estado: esEstadoInscripcion(estado) ? estado : undefined,
+    etapa: esEtapa(etapa) ? etapa : undefined,
   };
 
   const archivo = construirCsv(await listarInscripciones(), vista, filtros);
@@ -74,6 +84,7 @@ export async function GET(peticion: NextRequest) {
   console.log(
     `[exportar] ${new Date().toISOString()} · ${sesion.nombre} descargó "${archivo.nombre}"` +
       ` · vista=${vista}` +
+      ` · etapa=${filtros.etapa ?? "todas"}` +
       ` · categoria=${filtros.categoria ?? "todas"}` +
       ` · estado=${filtros.estado ?? "todos"}` +
       ` · ${archivo.filas} fila${archivo.filas === 1 ? "" : "s"}`,

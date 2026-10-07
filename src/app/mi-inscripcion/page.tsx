@@ -9,6 +9,7 @@ import {
   CUENTAS_RECAUDO,
   FECHA_LIMITE_ABONOS,
   categoriaPorCodigo,
+  etapaDeInscripcion,
 } from "@/lib/catalogo";
 import { abonadoEnRevision } from "@/lib/dinero";
 import { resumenDePago } from "@/lib/servicio";
@@ -57,6 +58,9 @@ function abonoVisible(abono: Abono): AbonoVisible {
 async function vistaDe(ins: Inscripcion): Promise<VistaPortal> {
   const categoria = categoriaPorCodigo(ins.categoriaCodigo);
   const resumen = await resumenDePago(ins);
+  // La etapa de ESTA inscripción, no la abierta hoy: es la que fija su precio
+  // de referencia y en cuántas cuotas puede pagar.
+  const etapa = etapaDeInscripcion(ins);
 
   return {
     referencia: ins.referencia,
@@ -71,6 +75,8 @@ async function vistaDe(ins: Inscripcion): Promise<VistaPortal> {
       ciudad: ins.ciclista.ciudad,
     },
     total: ins.total,
+    etapa: { nombre: etapa.nombre, precioBase: ins.precioBase },
+    descuento: { pesos: ins.descuento, codigo: ins.codigoReferido ?? null },
     pago: {
       abonos: resumen.abonos.map(abonoVisible),
       verificado: resumen.verificado,
@@ -85,6 +91,7 @@ async function vistaDe(ins: Inscripcion): Promise<VistaPortal> {
       opciones: resumen.opciones,
       venceProximaCuota: resumen.venceProximaCuota,
       montoMinimo: resumen.montoMinimo,
+      maxCuotas: resumen.maxCuotas,
     },
   };
 }

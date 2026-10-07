@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="es-CO">
+<head>
+<meta charset="utf-8">
+<title>Guía rápida de pruebas — Tibet Epic XCM 2027</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap">
+<style>
+  :root {
+    --tinta:#10241d; --grafito:#55665c; --tenue:#8a998f;
+    --papel:#fff; --crema:#f4f7f1; --borde:#dbe3d9;
+    --lima:#cbff47; --magenta:#ff4d91; --naranja:#ff9a2e;
+  }
+  * { box-sizing:border-box; }
+  @page { size: Letter; margin: 13mm 13mm 11mm; }
+  body {
+    margin:0; font-family:"Instrument Sans",system-ui,sans-serif;
+    font-size:9.2pt; line-height:1.38; color:var(--tinta); background:var(--papel);
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+  h1,h2,h3 { font-family:"Bricolage Grotesque",system-ui,sans-serif; font-weight:800; margin:0; letter-spacing:-0.025em; }
+  h1 { font-size:21pt; line-height:1; }
+  h2 { font-size:12.4pt; margin:0 0 5pt; }
+  p { margin:0 0 6pt; }
+  .mono { font-family:"Space Mono",monospace; }
+  .hoja { page-break-after:always; }
+  .hoja:last-child { page-break-after:auto; }
+
+  header.tope { display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2.5pt solid var(--tinta); padding-bottom:7pt; margin-bottom:10pt; }
+  .marca { font-family:"Bricolage Grotesque"; font-weight:800; font-size:11pt; letter-spacing:-0.04em; }
+  .marca span { color:#6d9b16; }
+  .cejilla { font-family:"Space Mono",monospace; font-size:7pt; font-weight:700; letter-spacing:0.16em; text-transform:uppercase; color:var(--tenue); margin:0 0 3pt; }
+
+  .aviso { background:var(--lima); border:2pt solid var(--tinta); border-radius:7pt; padding:7pt 11pt; margin-bottom:10pt; }
+  .aviso strong { font-weight:600; }
+
+  .url { border:2pt dashed var(--tinta); border-radius:7pt; padding:7pt 11pt; margin-bottom:11pt; }
+  .url .linea { border-bottom:1.4pt solid var(--tinta); height:17pt; margin-top:3pt; }
+
+  table { width:100%; border-collapse:collapse; margin:0 0 11pt; }
+  th,td { text-align:left; padding:4.2pt 7pt; border-bottom:0.8pt solid var(--borde); vertical-align:top; }
+  thead th { font-family:"Space Mono",monospace; font-size:7pt; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--tenue); border-bottom:1.8pt solid var(--tinta); }
+  tr:last-child td { border-bottom:0; }
+  td.ruta { font-family:"Space Mono",monospace; font-size:9.4pt; font-weight:700; white-space:nowrap; }
+  td.tarj { font-family:"Space Mono",monospace; font-size:10.4pt; font-weight:700; white-space:nowrap; }
+  .gris { color:var(--grafito); }
+
+  .pill { display:inline-block; padding:1.5pt 7pt; border-radius:99pt; border:1.3pt solid var(--tinta); font-size:8pt; font-weight:600; white-space:nowrap; }
+  .ok{background:var(--lima)} .no{background:var(--magenta)} .na{background:#e8e8e8}
+
+  .caso { border:1.6pt solid var(--tinta); border-radius:8pt; padding:7pt 10pt; margin-bottom:5.4pt; page-break-inside:avoid; }
+  .caso .cab { display:flex; align-items:baseline; gap:7pt; margin-bottom:3pt; }
+  .n { font-family:"Space Mono",monospace; font-size:8pt; font-weight:700; background:var(--tinta); color:var(--lima); border-radius:99pt; width:17pt; height:17pt; display:inline-flex; align-items:center; justify-content:center; flex:0 0 17pt; }
+  .caso h3 { font-size:10.6pt; }
+  .caso .donde { font-family:"Space Mono",monospace; font-size:8.4pt; color:var(--grafito); margin-left:auto; }
+  .caso dl { margin:0; display:grid; grid-template-columns:auto 1fr; gap:2pt 8pt; }
+  .caso dt { font-family:"Space Mono",monospace; font-size:7pt; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--tenue); padding-top:1.5pt; white-space:nowrap; }
+  .caso dd { margin:0; }
+
+  .nota { background:var(--crema); border-left:2.5pt solid var(--naranja); padding:7pt 10pt; margin-bottom:11pt; font-size:9.4pt; }
+  .nota.rosa { border-left-color:var(--magenta); background:#fff3f8; }
+  ul.simple { margin:0; padding-left:14pt; }
+  ul.simple li { margin-bottom:3pt; }
+  footer { font-size:8pt; color:var(--tenue); border-top:0.8pt solid var(--borde); padding-top:6pt; margin-top:10pt; }
+</style>
+</head>
+<body>
+
+<!-- =============================== HOJA 1 =============================== -->
+<section class="hoja">
+  <header class="tope">
+    <div>
+      <p class="cejilla">Tibet Epic XCM 2027 · Versión de pruebas</p>
+      <h1>Guía rápida de pruebas</h1>
+    </div>
+    <p class="mono" style="margin:0;font-size:8pt;color:var(--tenue)">Hoja 1 de 2</p>
+  </header>
+
+  <div class="aviso">
+    <strong>Ningún pago es real.</strong> La página está en modo de pruebas con tarjetas
+    falsas del banco. <strong>No uses tu tarjeta personal</strong> en ningún momento.
+  </div>
+
+  <div class="url">
+    <p class="cejilla" style="margin:0">La dirección de la página</p>
+    <div class="linea"></div>
+  </div>
+
+  <h2>Rutas</h2>
+  <p class="gris" style="margin-bottom:7pt">Se escriben después de la dirección. Ejemplo: <span class="mono">…/inscripcion</span></p>
+
+  <table>
+    <thead><tr><th style="width:30%">Ruta</th><th>Para qué sirve</th></tr></thead>
+    <tbody>
+      <tr><td class="ruta">/</td><td>Página principal: categorías, precios y cómo se paga</td></tr>
+      <tr><td class="ruta">/inscripcion</td><td>El formulario de inscripción, en cinco pasos</td></tr>
+      <tr><td class="ruta">/mi-inscripcion</td><td>El ciclista consulta su saldo y adelanta cuotas</td></tr>
+      <tr><td class="ruta">/ticket/…</td><td>El ticket con dorsal y código QR (se llega desde «Mi inscripción»)</td></tr>
+      <tr><td class="ruta">/panel</td><td><strong>Solo para ustedes.</strong> Inscritos, recaudo y quién está en mora</td></tr>
+      <tr><td class="ruta">/correos</td><td><strong>Solo para ustedes.</strong> Todos los correos que se han enviado</td></tr>
+    </tbody>
+  </table>
+
+  <div class="nota rosa">
+    <strong>/panel y /correos todavía no tienen clave.</strong> Se les pone antes de abrir
+    al público; por ahora no compartan esas dos direcciones.
+  </div>
+
+  <h2>Tarjetas de prueba</h2>
+  <table>
+    <thead><tr><th style="width:36%">Número</th><th>Qué pasa</th></tr></thead>
+    <tbody>
+      <tr><td class="tarj">4242 4242 4242 4242</td><td><span class="pill ok">Se aprueba</span> <span class="gris">— la de uso normal</span></td></tr>
+      <tr><td class="tarj">4111 1111 1111 1111</td><td><span class="pill no">La rechaza el banco</span> <span class="gris">— para probar pagos fallidos</span></td></tr>
+      <tr><td class="tarj">Cualquier otro número</td><td><span class="pill na">Da error</span></td></tr>
+    </tbody>
+  </table>
+
+  <p class="gris" style="margin:-6pt 0 12pt">
+    <strong>Los demás datos son libres:</strong> vencimiento, cualquier fecha futura
+    (<span class="mono">12/29</span>) · código CVC, tres cifras cualesquiera
+    (<span class="mono">123</span>) · titular, cualquier nombre.
+  </p>
+
+  <h2>Nequi y PSE</h2>
+  <table>
+    <thead><tr><th style="width:22%">Medio</th><th style="width:39%">Se aprueba</th><th>Se rechaza</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Nequi</strong></td><td class="mono">3991111111</td><td class="mono">3992222222</td></tr>
+      <tr><td><strong>PSE</strong></td><td>Banco «que aprueba»</td><td>Banco «que rechaza»</td></tr>
+    </tbody>
+  </table>
+
+  <p class="gris" style="margin:-5pt 0 0">
+    <strong>Nequi y PSE solo sirven para pagar todo de una vez.</strong> El plan de 4 cuotas
+    necesita tarjeta: es la única forma de guardar el medio de pago para los meses siguientes.
+  </p>
+</section>
+
+<!-- =============================== HOJA 2 =============================== -->
+<section class="hoja">
+  <header class="tope">
+    <div>
+      <p class="cejilla">Qué probar</p>
+      <h1>Casos de uso</h1>
+    </div>
+    <p class="mono" style="margin:0;font-size:8pt;color:var(--tenue)">Hoja 2 de 2</p>
+  </header>
+
+  <div class="caso">
+    <div class="cab"><span class="n">1</span><h3>Inscribirse pagando todo de una</h3><span class="donde">/inscripcion</span></div>
+    <dl>
+      <dt>Haz</dt><dd>Llena el formulario con un correo tuyo real. En el pago escoge <strong>Todo de una</strong> y usa la <span class="mono">4242…</span></dd>
+      <dt>Espera</dt><dd>Sale «Estás dentro» con un número de referencia, y te llega el correo de confirmación.</dd>
+    </dl>
+  </div>
+
+  <div class="caso">
+    <div class="cab"><span class="n">2</span><h3>Inscribirse en 4 cuotas</h3><span class="donde">/inscripcion</span></div>
+    <dl>
+      <dt>Haz</dt><dd>Otro documento y otro correo. Escoge <strong>4 cuotas</strong>, marca la casilla de autorización y dale al botón azul de Wompi. Tarjeta <span class="mono">4242…</span></dd>
+      <dt>Espera</dt><dd>Las cuotas suman $750.000 exactos. Sale una rueda girando unos 10 segundos y termina en el ticket, «cuota 1 de 4».</dd>
+    </dl>
+  </div>
+
+  <div class="caso">
+    <div class="cab"><span class="n">3</span><h3>Pago rechazado</h3><span class="donde">/inscripcion</span></div>
+    <dl>
+      <dt>Haz</dt><dd>Inscríbete otra vez en 4 cuotas, pero con la tarjeta <span class="mono">4111…</span></dd>
+      <dt>Espera</dt><dd>Avisa que el banco rechazó, la inscripción no se pierde, y llega un correo con el motivo.</dd>
+    </dl>
+  </div>
+
+  <div class="caso">
+    <div class="cab"><span class="n">4</span><h3>Consultar el saldo</h3><span class="donde">/mi-inscripcion</span></div>
+    <dl>
+      <dt>Haz</dt><dd>Escribe el documento y el correo del caso 2.</dd>
+      <dt>Espera</dt><dd>Muestra cuánto lleva pagado, cuánto falta y la fecha del próximo cobro.</dd>
+    </dl>
+  </div>
+
+  <div class="caso">
+    <div class="cab"><span class="n">5</span><h3>Adelantar una cuota y pagar todo</h3><span class="donde">/mi-inscripcion</span></div>
+    <dl>
+      <dt>Haz</dt><dd>Dale a <strong>Adelantar la cuota 2</strong>. Después usa <strong>Pagar todo el saldo</strong>.</dd>
+      <dt>Espera</dt><dd>El saldo baja, las casillas se ponen verdes y llega un comprobante por cada cobro.</dd>
+    </dl>
+  </div>
+
+  <div class="caso">
+    <div class="cab"><span class="n">6</span><h3>El ticket</h3><span class="donde">/ticket/…</span></div>
+    <dl>
+      <dt>Haz</dt><dd>Desde «Mi inscripción» dale a <strong>Ver mi ticket</strong>. Escanea el QR con la cámara del celular e imprímelo.</dd>
+      <dt>Espera</dt><dd>El QR abre el mismo ticket. Al imprimir sale limpio, sin menús ni botones.</dd>
+    </dl>
+  </div>
+
+  <div class="caso">
+    <div class="cab"><span class="n">7</span><h3>Los correos</h3><span class="donde">/correos</span></div>
+    <dl>
+      <dt>Haz</dt><dd>Revisa tu bandeja de entrada, y también la carpeta de correo no deseado.</dd>
+      <dt>Espera</dt><dd>Uno por cada pago y uno por cada rechazo. <strong>Dinos qué cambiarías de los textos.</strong></dd>
+    </dl>
+  </div>
+
+  <div class="caso">
+    <div class="cab"><span class="n">8</span><h3>El panel de la organización</h3><span class="donde">/panel</span></div>
+    <dl>
+      <dt>Haz</dt><dd>Ábrelo después de hacer los casos anteriores.</dd>
+      <dt>Espera</dt><dd>Aparecen todos los inscritos, el total recaudado, lo que falta por cobrar, y el del caso 3 marcado en mora.</dd>
+    </dl>
+  </div>
+
+  <div class="nota" style="margin:9pt 0 0">
+    <strong>Si algo falla, anota</strong> en qué caso ibas, qué esperabas, la referencia
+    (<span class="mono">TE27-…</span>), si fue en computador o celular, y una foto.<br>
+    <strong style="display:inline-block;margin-top:4pt">Tres cosas que ustedes deben decidir:</strong>
+    qué pasa con el cupo si alguien deja de pagar; hasta qué fecha se ofrece el plan de
+    cuotas; y si el reembolso del 70 % se calcula sobre lo abonado o sobre los $750.000.
+  </div>
+
+  <p style="margin:8pt 0 0;font-size:7.6pt;color:var(--tenue)">
+    Tibet Epic XCM 2027 · Pagos procesados por Wompi (Bancolombia)
+  </p>
+</section>
+
+</body>
+</html>

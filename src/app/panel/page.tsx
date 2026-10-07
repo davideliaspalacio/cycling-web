@@ -3,10 +3,16 @@ import { cookies } from "next/headers";
 import { Encabezado, Pie } from "@/components/marco";
 import { Chip, Tarjeta, TituloSeccion } from "@/components/ui";
 import { abonosPorRevisar, listarInscripciones } from "@/lib/almacen";
-import { categoriaPorCodigo } from "@/lib/catalogo";
-import { pesos } from "@/lib/dinero";
+import {
+  CODIGO_ETAPA_ACTIVA,
+  ETAPAS,
+  categoriaPorCodigo,
+  etapaDeInscripcion,
+  etapaPorCodigo,
+} from "@/lib/catalogo";
+import { pesos, textoDePlan } from "@/lib/dinero";
 import { COOKIE_SESION, leerSesion } from "@/lib/sesion";
-import type { EstadoInscripcion, PlanPago } from "@/lib/tipos";
+import type { EstadoInscripcion, Inscripcion } from "@/lib/tipos";
 import { Salir } from "./salir";
 
 export const dynamic = "force-dynamic";
@@ -35,23 +41,44 @@ const TEXTO: Record<EstadoInscripcion, string> = {
   COMPLETA: "Completa",
 };
 
-const PLAN: Record<PlanPago, string> = {
-  CONTADO: "Contado (tarjeta · histórico)",
-  CUOTAS: "Cuotas (tarjeta · histórico)",
-  TOTAL: "Pago total",
-  // `ABONOS` a secas es el valor histórico de cuando el único plan diferido
-  // eran dos cuotas; sigue queriendo decir eso.
-  ABONOS: "Dos cuotas",
-  ABONOS_2: "Dos cuotas",
-  ABONOS_3: "Tres cuotas",
-};
-
-export default async function Panel() {
+export default async function Panel({
+  searchParams,
+}: PageProps<"/panel">) {
   const sesion = leerSesion((await cookies()).get(COOKIE_SESION)?.value);
-  const [inscripciones, porRevisar] = await Promise.all([
+  const { etapa: etapaParam } = await searchParams;
+
+  const [todas, porRevisar] = await Promise.all([
     listarInscripciones(),
     abonosPorRevisar(),
   ]);
+
+  /*
+   * Los cupos se cuentan por etapa, sobre TODAS las inscripciones, antes de
+   * filtrar: la pregunta "¿cuántos cupos quedan?" no cambia porque alguien
+   * esté mirando una etapa concreta en la tabla de abajo.
+   *
+   * Las inscripciones anteriores a la columna `etapa` cuentan como de la
+   * primera, que es lo que son (`etapaDeInscripcion`).
+   */
+  const porEtapa = ETAPAS.map((e) => {
+    const suyas = todas.filter((i) => etapaDeInscripcion(i).codigo === e.codigo);
+    return {
+      etapa: e,
+      inscritos: suyas.length,
+      quedan: Math.max(0, e.cupos - suyas.length),
+      recaudado: suyas.reduce((s, i) => s + i.pagado, 0),
+      activa: e.codigo === CODIGO_ETAPA_ACTIVA,
+    };
+  });
+
+  const filtroEtapa =
+    typeof etapaParam === "string" && etapaPorCodigo(etapaParam)
+      ? etapaParam
+      : undefined;
+
+  const inscripciones: Inscripcion[] = filtroEtapa
+    ? todas.filter((i) => etapaDeInscripcion(i).codigo === filtroEtapa)
+    : todas;
 
   const recaudado = inscripciones.reduce((s, i) => s + i.pagado, 0);
   // El saldo sale de `total − pagado` y no de la tabla de cuotas: bajo pago
@@ -115,9 +142,86 @@ export default async function Panel() {
           </Tarjeta>
         </Link>
 
+        {/* ------------------------- Cupos por etapa ----------------------- */}
+        {/*
+          Las dos etapas son tarifas distintas y cupos distintos, así que
+          sumarlas en una sola cifra no contesta nada: lo que la organización
+          pregunta es cuántos cupos quedan de la que está abierta.
+        */}
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          {porEtapa.map((e) => {
+            const pct = Math.min(
+              100,
+              Math.round((e.inscritos / e.etapa.cupos) * 100),
+            );
+            return (
+              <Tarjeta
+                key={e.etapa.codigo}
+                tono={e.activa ? "turquesa" : "nube"}
+                className="p-5"
+              >
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="font-mono text-[0.64rem] font-bold uppercase tracking-[0.16em] text-tinta/75">
+                    Etapa {e.etapa.nombre}
+                  </p>
+                  {e.activa ? (
+                    <Chip tono="rio">Abierta</Chip>
+                  ) : (
+                    <Chip tono="nube">Cerrada</Chip>
+                  )}
+                </div>
+                <p className="mt-2 font-display text-[1.75rem] font-extrabold leading-none tracking-[-0.03em] text-tinta">
+                  {e.inscritos}{" "}
+                  <span className="text-[1.1rem] font-bold text-tinta/75">
+                    de {e.etapa.cupos} cupos
+                  </span>
+                </p>
+                <div
+                  className="mt-3 h-3 w-full overflow-hidden rounded-md border-[2.5px] border-tinta bg-nube"
+                  role="img"
+                  aria-label={`${pct}% de los cupos de la etapa ${e.etapa.nombre}`}
+                >
+                  <div className="h-full bg-rio" style={{ width: `${pct}%` }} />
+                </div>
+                <p className="mt-2.5 text-[0.84rem] leading-snug text-tinta/75">
+                  Quedan <strong>{e.quedan}</strong> ·{" "}
+                  {pesos(e.etapa.precio)} por inscripción · hasta{" "}
+                  {Math.max(...e.etapa.planes)} cuota
+                  {Math.max(...e.etapa.planes) === 1 ? "" : "s"}
+                  {e.etapa.descuento > 0
+                    ? ` · ${e.etapa.descuento}% con código`
+                    : ""}
+                </p>
+                <p className="raya-mono mt-1 text-[0.72rem] text-tinta/75">
+                  {pesos(e.recaudado)} recaudados en esta etapa
+                </p>
+                <p className="mt-2">
+                  <Link
+                    href={
+                      filtroEtapa === e.etapa.codigo
+                        ? "/panel"
+                        : `/panel?etapa=${e.etapa.codigo}`
+                    }
+                    className="font-mono text-[0.7rem] font-bold uppercase tracking-[0.13em] text-rio hover:underline"
+                  >
+                    {filtroEtapa === e.etapa.codigo
+                      ? "Quitar el filtro"
+                      : "Ver solo esta etapa"}{" "}
+                    →
+                  </Link>
+                </p>
+              </Tarjeta>
+            );
+          })}
+        </div>
+
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
           {[
-            { etiqueta: "Inscritos", valor: String(inscripciones.length), tono: "nube" as const },
+            {
+              etiqueta: filtroEtapa ? "Inscritos (etapa filtrada)" : "Inscritos",
+              valor: String(inscripciones.length),
+              tono: "nube" as const,
+            },
             { etiqueta: "Recaudado", valor: pesos(recaudado), tono: "turquesa" as const },
             { etiqueta: "Por cobrar", valor: pesos(porCobrar), tono: "sol" as const },
           ].map((m) => (
@@ -134,7 +238,13 @@ export default async function Panel() {
 
         <nav className="mt-6 flex flex-wrap gap-x-6 gap-y-2">
           {[
-            ["/panel/exportar", "Bajar la lista de inscritos"],
+            [
+              filtroEtapa
+                ? `/panel/exportar?etapa=${filtroEtapa}`
+                : "/panel/exportar",
+              "Bajar la lista de inscritos",
+            ],
+            ["/panel/codigos", "Códigos de referido"],
             ["/panel/competidor", "Cambiar de competidor"],
             // "¿Le llegó?" es la pregunta que llega por WhatsApp; el visor de
             // HTML de /correos responde otra ("¿qué decía?") y va detrás.
@@ -169,13 +279,14 @@ export default async function Panel() {
               comprobantes y todo lo que le ha pasado a su cupo.
             </p>
             <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] border-collapse text-left">
+            <table className="w-full min-w-[960px] border-collapse text-left">
               <thead>
                 <tr className="border-b-[3px] border-tinta/20">
                   {[
                     "Referencia",
                     "Ciclista",
                     "Categoría",
+                    "Etapa",
                     "Plan",
                     "Pagado",
                     "Saldo",
@@ -226,9 +337,23 @@ export default async function Panel() {
                       <td className="py-3 pr-4 text-[0.85rem] text-tinta/75">
                         {categoriaPorCodigo(i.categoriaCodigo)?.nombre}
                       </td>
+                      {/*
+                        La etapa con el precio al que entró: es el dato que
+                        explica por qué dos filas con el mismo saldo deben
+                        cifras distintas.
+                      */}
                       <td className="py-3 pr-4">
                         <span className="raya-mono text-[0.72rem] text-tinta/75">
-                          {PLAN[i.plan]}
+                          {etapaDeInscripcion(i).nombre}
+                          <span className="block text-[0.68rem] text-tinta/75">
+                            {pesos(i.total)}
+                            {i.descuento > 0 ? ` · −${pesos(i.descuento)}` : ""}
+                          </span>
+                        </span>
+                      </td>
+                      <td className="py-3 pr-4">
+                        <span className="raya-mono text-[0.72rem] text-tinta/75">
+                          {textoDePlan(i.plan)}
                         </span>
                       </td>
                       <td className="raya-mono py-3 pr-4 text-[0.82rem] text-tinta/85">

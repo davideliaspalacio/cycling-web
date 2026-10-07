@@ -32,8 +32,135 @@ export const EVENTO = {
 /** Nombre completo tal como se firma en textos legales, correos y pies de página. */
 export const NOMBRE_COMPLETO = `${EVENTO.nombre} ${EVENTO.anio}`;
 
-/** Precio único de la inscripción, en pesos. Todas las categorías cuestan lo mismo. */
-export const PRECIO_INSCRIPCION = 380000;
+/* --------------------------------- Etapas ---------------------------------- */
+
+/**
+ * Las etapas de inscripción.
+ *
+ * Una etapa es una tarifa con su propia letra pequeña: precio, cupos, en
+ * cuántas cuotas se puede repartir y si admite el descuento de referido. La
+ * organización abre una etapa nueva cuando se agota la anterior, y la nueva es
+ * más cara.
+ *
+ * ── La regla que no se puede romper ────────────────────────────────────────
+ * **Cada inscripción recuerda su etapa y su precio.** No se le pregunta al
+ * catálogo cuánto vale una inscripción vieja: se le pregunta a la inscripción
+ * (`ins.total`, `ins.etapa`, `ins.precioBase`). Si el saldo de alguien saliera
+ * de esta constante, abrir la etapa 2 le subiría la deuda a las 142 personas
+ * que entraron en la 1 — gente que ya pagó una parte de otro precio.
+ *
+ * De aquí sale solo lo de **quien se inscribe ahora**. Todo lo demás —montos
+ * de cuota, saldos, mínimos de comprobante— sale del total de su inscripción y
+ * de los planes de SU etapa (`etapaDeInscripcion`).
+ */
+export type Etapa = {
+  /** El código que se guarda en la columna `etapa`. No se cambia nunca. */
+  codigo: string;
+  /** Como la llama la organización. */
+  nombre: string;
+  /** Precio de lista, en pesos, antes de cualquier descuento. */
+  precio: number;
+  /** Cuántas inscripciones caben en esta etapa. */
+  cupos: number;
+  /**
+   * Los planes de pago de esta etapa, en número de cuotas. De menos a más: es
+   * el orden que ve el ciclista y el que recorre `planesViables`.
+   *
+   * El número de cuotas es a la vez el número de comprobantes: uno por cuota,
+   * no una bolsa de abonos libres. "1 cuota" es el pago total de siempre,
+   * modelado como un plan más para no mantener dos caminos.
+   */
+  planes: readonly number[];
+  /**
+   * Porcentaje de descuento que aplica un código de referido válido en esta
+   * etapa. 0 = esta etapa no admite descuento.
+   *
+   * ── Por qué el porcentaje vive en la etapa y no en el código ─────────────
+   * Porque así lo pidió la organización: el 10% es una condición de la etapa 2
+   * («10% con código de referido»), no algo que se negocie embajador por
+   * embajador. Un solo número que cambiar, y ningún riesgo de que veinte
+   * códigos se desincronicen entre ellos.
+   *
+   * Lo que podría dar miedo —que cambiar el porcentaje mueva lo ya cobrado— no
+   * puede pasar: la inscripción guarda el descuento **en pesos**
+   * (`ins.descuento`), no el porcentaje. Esta cifra solo decide lo que se le
+   * aplica a quien se inscribe ahora.
+   *
+   * Si algún día hace falta un porcentaje por código, la tabla
+   * `codigos_referido` admite una columna nueva con DEFAULT NULL que signifique
+   * «usa el de la etapa»; nada de lo de aquí tendría que cambiar.
+   */
+  descuento: number;
+};
+
+export const ETAPAS: readonly Etapa[] = [
+  {
+    codigo: "ETAPA_1",
+    nombre: "Creyentes",
+    precio: 380000,
+    cupos: 150,
+    planes: [1, 2, 3],
+    descuento: 0,
+  },
+  {
+    codigo: "ETAPA_2",
+    nombre: "Segunda etapa",
+    precio: 470000,
+    cupos: 250,
+    planes: [1, 2, 3, 4],
+    descuento: 10,
+  },
+] as const;
+
+/**
+ * La etapa que se le aplica a quien se inscribe ahora.
+ *
+ * Es un valor escrito a mano y no «la última de la lista» a propósito: abrir
+ * una etapa tiene que ser una decisión explícita de una línea, no el efecto
+ * colateral de añadir una fila más abajo.
+ */
+export const CODIGO_ETAPA_ACTIVA = "ETAPA_2";
+
+export function etapaPorCodigo(codigo: string | undefined): Etapa | undefined {
+  return codigo ? ETAPAS.find((e) => e.codigo === codigo) : undefined;
+}
+
+/** La etapa activa. Si el código no existiera, el arranque falla y se ve. */
+export const ETAPA_ACTIVA: Etapa = (() => {
+  const etapa = etapaPorCodigo(CODIGO_ETAPA_ACTIVA);
+  if (!etapa) {
+    throw new Error(
+      `CODIGO_ETAPA_ACTIVA apunta a «${CODIGO_ETAPA_ACTIVA}», que no está en ETAPAS.`,
+    );
+  }
+  return etapa;
+})();
+
+/**
+ * La etapa de una inscripción ya guardada.
+ *
+ * El respaldo es la etapa 1 y no la activa: las filas anteriores a esta
+ * columna son todas de la primera etapa, y suponer la activa les cambiaría los
+ * planes de pago y el precio de referencia de un despliegue a otro.
+ */
+export const CODIGO_ETAPA_HISTORICA = "ETAPA_1";
+
+export function etapaDeInscripcion(ins: { etapa?: string }): Etapa {
+  return (
+    etapaPorCodigo(ins.etapa) ??
+    etapaPorCodigo(CODIGO_ETAPA_HISTORICA) ??
+    ETAPA_ACTIVA
+  );
+}
+
+/**
+ * Precio de la inscripción de quien se inscribe **ahora**.
+ *
+ * Sigue existiendo con este nombre porque la portada, el Open Graph y los
+ * metadatos anuncian la tarifa vigente, que es exactamente esto. Nada que
+ * calcule el saldo de una inscripción puede usarlo.
+ */
+export const PRECIO_INSCRIPCION = ETAPA_ACTIVA.precio;
 
 /** Número de cuotas del plan de financiación. */
 export const CUOTAS_DEL_PLAN = 4;
@@ -44,19 +171,15 @@ export const DIA_DE_COBRO = 5;
 /* ------------------------- Pago manual por transferencia ------------------- */
 
 /**
- * Los planes de pago que ofrece la organización, en número de cuotas — ver
- * docs/decisiones-pago-manual.md §1.
+ * Los planes de pago de la etapa activa — ver docs/decisiones-pago-manual.md §1.
  *
- * El número de cuotas es a la vez el número de comprobantes: uno por cuota, no
- * una bolsa de abonos libres. "1 cuota" es el pago total de siempre, modelado
- * como un plan más para no mantener dos caminos.
- *
- * Va de menos a más a propósito: el orden es el que ve el ciclista y el que
- * recorre `planesViables` para decidir cuál le corresponde a un comprobante.
+ * Es lo que se le ofrece a quien se inscribe hoy. Los planes de una
+ * inscripción ya existente salen de SU etapa (`etapaDeInscripcion(ins).planes`),
+ * nunca de aquí: las de la etapa 1 siguen con 1–3 aunque la activa llegue a 4.
  */
-export const PLANES_DE_CUOTAS = [1, 2, 3] as const;
+export const PLANES_DE_CUOTAS = ETAPA_ACTIVA.planes;
 
-/** El plan más largo que existe. Ningún comprobante más allá de este es válido. */
+/** El plan más largo de la etapa activa. */
 export const MAX_CUOTAS = Math.max(...PLANES_DE_CUOTAS);
 
 /**
@@ -421,3 +544,29 @@ export const EMBAJADORES = [
 
 /** Opción del selector que abre el campo libre para una comunidad nueva. */
 export const OTRO_EMBAJADOR = "Otro";
+
+/* --------------------------- Códigos de referido --------------------------- */
+
+/** Lo máximo que puede medir un código. Se dicta por WhatsApp: corto. */
+export const LARGO_MAX_CODIGO = 24;
+
+/**
+ * Un código, siempre escrito igual.
+ *
+ * El código es la clave de su tabla y lo que guarda la inscripción, así que
+ * "pichurrias10", "PICHURRIAS10" y " Pichurrias 10 " tienen que ser el mismo
+ * código o el ciclista escribe bien y el sistema le dice que no existe. Se
+ * normaliza en los dos extremos: al crearlo en el panel y al recibirlo del
+ * formulario.
+ *
+ * Solo letras sin tilde, números, guion y guion bajo: lo que se puede dictar
+ * por teléfono sin aclarar nada.
+ */
+export function normalizarCodigo(valor: string): string {
+  return valor
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]/g, "")
+    .slice(0, LARGO_MAX_CODIGO);
+}

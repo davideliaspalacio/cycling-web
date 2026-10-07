@@ -58,8 +58,9 @@ try {
              id, referencia, creada_en, actualizada_en, estado, categoria_codigo,
              ciclista, tallas, consentimientos, plan, total, pagado,
              fuente_pago_id, tarjeta_resumen, eventos, autorizacion_cobro,
-             medio_pago
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+             medio_pago, etapa, precio_base, codigo_referido, descuento
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,
+                     $18,$19,$20,$21)
            ON CONFLICT (id) DO NOTHING`,
           [
             i.id, i.referencia, i.creadaEn, i.actualizadaEn, i.estado, i.categoriaCodigo,
@@ -71,6 +72,15 @@ try {
             i.autorizacionCobro ? JSON.stringify(i.autorizacionCobro) : null,
             // Un volcado anterior al pago manual no trae el campo: era Wompi.
             i.medioPago ?? "WOMPI",
+            // Un volcado anterior a las etapas es de la primera, por fecha.
+            // Dejarlo al DEFAULT de la columna daría lo mismo hoy, pero
+            // importar un volcado CON inscripciones de la etapa 2 las metería
+            // como etapa 1: perderían su cuarto plan de cuotas y su descuento
+            // sin que nada avise. Por eso van explícitas.
+            i.etapa ?? "ETAPA_1",
+            i.precioBase ?? null,
+            i.codigoReferido ?? null,
+            i.descuento ?? 0,
           ],
         );
         if (rowCount > 0) {

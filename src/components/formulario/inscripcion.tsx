@@ -11,7 +11,6 @@ import {
   GRUPOS,
   MUNICIPIOS,
   OTRO_EMBAJADOR,
-  PRECIO_INSCRIPCION,
   PRENDAS,
   TALLAS,
   TIPOS_RH,
@@ -23,7 +22,8 @@ import { pesos } from "@/lib/dinero";
 import { avisoDeCategoria, esquemaCiclista, esquemaTallas } from "@/lib/validacion";
 import type { CuentaRecaudo } from "@/lib/catalogo";
 import type { DatosCiclista, Tallas as TipoTallas } from "@/lib/tipos";
-import type { PlanOfrecido } from "./planes-de-pago";
+import { CampoCodigoReferido, type EstadoCodigo } from "./codigo-referido";
+import type { EtapaVisible, PlanOfrecido } from "./planes-de-pago";
 import { PasoPago } from "./paso-pago";
 import { MEDIDAS, TextosLegales } from "./legales";
 
@@ -61,6 +61,7 @@ export function FormularioInscripcion({
   cuentas,
   fechaLimite,
   planes,
+  etapa,
 }: {
   categoriaInicial?: string;
   /**
@@ -74,8 +75,15 @@ export function FormularioInscripcion({
   /**
    * Los planes de cuotas que todavía caben antes del cierre, con todos sus
    * montos y todas sus fechas, resueltos en el servidor.
+   *
+   * Es el punto de partida: están calculados sobre el precio de lista de la
+   * etapa activa, que es lo correcto mientras no haya código. En cuanto la
+   * inscripción existe, el servidor devuelve los suyos —sobre su total ya
+   * rebajado— y estos se reemplazan.
    */
   planes: PlanOfrecido[];
+  /** La etapa abierta: su precio, su descuento y su plan más largo. */
+  etapa: EtapaVisible;
 }) {
   const router = useRouter();
   const [paso, setPaso] = useState(categoriaInicial ? 1 : 0);
@@ -93,6 +101,33 @@ export function FormularioInscripcion({
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
   /** Referencia de la inscripción que ya existe para este documento, si la hay. */
   const [yaInscrito, setYaInscrito] = useState<string | null>(null);
+
+  /*
+   * El código y lo que el servidor dijo de él. `codigo` es lo que se manda;
+   * `descuento` y `total` solo se usan para pintar, porque el descuento de
+   * verdad lo recalcula el servidor al crear la inscripción.
+   */
+  const [codigo, setCodigo] = useState<EstadoCodigo>({
+    codigo: "",
+    aplica: false,
+    descuento: 0,
+    total: etapa.precio,
+  });
+
+  /*
+   * Lo que contestó `POST /api/inscripciones`: el total que de verdad debe,
+   * su descuento y los planes recalculados sobre ese total. Reemplaza a lo que
+   * se venía enseñando porque es lo único que coincide con lo que el servidor
+   * va a exigir al subir el comprobante.
+   */
+  const [creada, setCreada] = useState<{
+    total: number;
+    precioBase: number;
+    descuento: number;
+    codigoReferido: string | null;
+    planes: PlanOfrecido[];
+    avisoCodigo: string | null;
+  } | null>(null);
 
   const categoria = useMemo(
     () => categoriaPorCodigo(categoriaCodigo),
@@ -184,6 +219,7 @@ export function FormularioInscripcion({
             ciclista,
             tallas,
             consentimientos,
+            codigoReferido: codigo.codigo || undefined,
           }),
         });
         const datos = await res.json();
@@ -201,6 +237,14 @@ export function FormularioInscripcion({
           return;
         }
         setReferencia(datos.referencia);
+        setCreada({
+          total: datos.total,
+          precioBase: datos.precioBase,
+          descuento: datos.descuento,
+          codigoReferido: datos.codigoReferido ?? null,
+          planes: Array.isArray(datos.planes) ? datos.planes : planes,
+          avisoCodigo: datos.avisoCodigo ?? null,
+        });
       } catch {
         setErrorGeneral("Se cayó la conexión. Inténtalo otra vez.");
         return;
@@ -223,6 +267,7 @@ export function FormularioInscripcion({
         {paso === 0 && (
           <PasoCategoria
             seleccionada={categoriaCodigo}
+            etapa={etapa}
             onElegir={(c) => {
               setCategoriaCodigo(c);
               setErrorGeneral(null);
@@ -235,7 +280,9 @@ export function FormularioInscripcion({
             ciclista={ciclista}
             errores={errores}
             aviso={aviso}
+            etapa={etapa}
             onCambio={actualizar}
+            onCodigo={setCodigo}
           />
         )}
 
@@ -264,7 +311,14 @@ export function FormularioInscripcion({
             tallas={tallas}
             cuentas={cuentas}
             fechaLimite={fechaLimite}
-            planes={planes}
+            /* Lo que contestó el servidor, no lo que se venía enseñando. */
+            planes={creada?.planes ?? planes}
+            etapa={etapa}
+            total={creada?.total ?? etapa.precio}
+            precioBase={creada?.precioBase ?? etapa.precio}
+            descuento={creada?.descuento ?? 0}
+            codigoReferido={creada?.codigoReferido ?? null}
+            avisoCodigo={creada?.avisoCodigo ?? null}
             onCompletado={() => router.push(`/mi-inscripcion?ref=${referencia}`)}
           />
         )}
@@ -304,7 +358,15 @@ export function FormularioInscripcion({
           <div className="flex items-center gap-4">
             {categoria && (
               <span className="raya-mono hidden text-[0.75rem] text-tinta/75 sm:block">
-                {categoria.nombre} · {pesos(categoria.precio)}
+                {categoria.nombre} ·{" "}
+                {codigo.aplica ? (
+                  <>
+                    <s className="text-tinta/50">{pesos(etapa.precio)}</s>{" "}
+                    <strong>{pesos(codigo.total)}</strong>
+                  </>
+                ) : (
+                  pesos(etapa.precio)
+                )}
               </span>
             )}
             <Boton onClick={siguiente} disabled={enviando} tamano="lg">
@@ -325,9 +387,11 @@ export function FormularioInscripcion({
 
 function PasoCategoria({
   seleccionada,
+  etapa,
   onElegir,
 }: {
   seleccionada: string;
+  etapa: EtapaVisible;
   onElegir: (codigo: string) => void;
 }) {
   return (
@@ -335,10 +399,22 @@ function PasoCategoria({
       <h1 className="font-display text-[clamp(1.8rem,5vw,2.7rem)] font-extrabold leading-none tracking-[-0.035em] text-tinta">
         ¿Dónde compites?
       </h1>
+      {/*
+        El precio sale de la etapa abierta, no de una constante: cuando la
+        organización abre una etapa nueva, esta línea cambia sola, y las
+        inscripciones de la etapa anterior siguen con el precio que firmaron.
+      */}
       <p className="mt-3 max-w-xl text-[0.98rem] leading-relaxed text-tinta/75">
-        Todas cuestan {pesos(PRECIO_INSCRIPCION)}. La organización revisa que tu
-        edad al 31 de diciembre de {ANIO_CARRERA} coincida con la categoría antes
-        de confirmar el cupo.
+        Todas cuestan {pesos(etapa.precio)}. La organización revisa que tu edad
+        al 31 de diciembre de {ANIO_CARRERA} coincida con la categoría antes de
+        confirmar el cupo.
+        {etapa.descuento > 0 && (
+          <>
+            {" "}
+            Si tienes código de un embajador, te descontamos el{" "}
+            {etapa.descuento}% en el paso siguiente.
+          </>
+        )}
       </p>
 
       <div className="mt-8 flex flex-col gap-8">
@@ -401,12 +477,16 @@ function PasoDatos({
   ciclista,
   errores,
   aviso,
+  etapa,
   onCambio,
+  onCodigo,
 }: {
   ciclista: DatosCiclista;
   errores: Errores;
   aviso: string | null;
+  etapa: EtapaVisible;
   onCambio: (campo: keyof DatosCiclista, valor: string) => void;
+  onCodigo: (estado: EstadoCodigo) => void;
 }) {
   // Al volver de otro paso el valor escrito a mano es la única pista de que
   // el ciclista había elegido "Otro".
@@ -548,6 +628,18 @@ function PasoDatos({
             )}
           </>
         </Campo>
+
+        {/*
+          El código va pegado al embajador porque es la misma conversación
+          ("quién te trajo"), pero son datos distintos: el embajador es
+          estadística y el código es dinero. Y va aquí, antes de los permisos,
+          para que el precio con descuento se vea antes de llegar al pago.
+        */}
+        <CampoCodigoReferido
+          precio={etapa.precio}
+          porcentaje={etapa.descuento}
+          onCambio={onCodigo}
+        />
       </div>
 
       {aviso && (

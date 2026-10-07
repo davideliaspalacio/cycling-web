@@ -2,11 +2,17 @@ import Link from "next/link";
 import { Encabezado, Pie } from "@/components/marco";
 import { Chip, Tarjeta, TituloSeccion } from "@/components/ui";
 import { listarInscripciones } from "@/lib/almacen";
-import { CATEGORIAS, categoriaPorCodigo } from "@/lib/catalogo";
+import {
+  CATEGORIAS,
+  ETAPAS,
+  categoriaPorCodigo,
+  etapaPorCodigo,
+} from "@/lib/catalogo";
 import {
   ESTADOS_INSCRIPCION,
   VISTAS,
   esEstadoInscripcion,
+  esEtapa,
   filtrar,
   textoDeEstado,
 } from "@/lib/exportacion";
@@ -37,7 +43,7 @@ export const metadata = {
 export default async function Exportar({
   searchParams,
 }: PageProps<"/panel/exportar">) {
-  const { categoria, estado } = await searchParams;
+  const { categoria, estado, etapa } = await searchParams;
 
   const catElegida =
     typeof categoria === "string" && categoriaPorCodigo(categoria)
@@ -47,21 +53,24 @@ export default async function Exportar({
     typeof estado === "string" && esEstadoInscripcion(estado)
       ? estado
       : undefined;
+  const etapaElegida = esEtapa(etapa) ? etapa : undefined;
 
   const todas = await listarInscripciones();
   const seleccion = filtrar(todas, {
     categoria: catElegida,
     estado: estadoElegido,
+    etapa: etapaElegida,
   });
 
   const enlace = (vista: string) => {
     const p = new URLSearchParams({ vista });
     if (catElegida) p.set("categoria", catElegida);
     if (estadoElegido) p.set("estado", estadoElegido);
+    if (etapaElegida) p.set("etapa", etapaElegida);
     return `/api/panel/exportar?${p.toString()}`;
   };
 
-  const hayFiltro = Boolean(catElegida || estadoElegido);
+  const hayFiltro = Boolean(catElegida || estadoElegido || etapaElegida);
 
   return (
     <>
@@ -97,6 +106,33 @@ export default async function Exportar({
 
         {/* --------------------------- Filtros --------------------------- */}
         <form method="get" className="mt-7 flex flex-wrap items-end gap-3">
+          {/*
+            La etapa va primero porque es el corte que más se pide: las dos
+            etapas son tarifas distintas y el proveedor casi siempre quiere una
+            sola tanda.
+          */}
+          <div className="flex min-w-52 flex-1 flex-col gap-1.5">
+            <label
+              htmlFor="etapa"
+              className="font-display text-[0.8rem] font-bold uppercase tracking-[0.1em] text-tinta/75"
+            >
+              Etapa
+            </label>
+            <select
+              id="etapa"
+              name="etapa"
+              defaultValue={etapaElegida ?? ""}
+              className="campo"
+            >
+              <option value="">Todas las etapas</option>
+              {ETAPAS.map((e) => (
+                <option key={e.codigo} value={e.codigo}>
+                  {e.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="flex min-w-52 flex-1 flex-col gap-1.5">
             <label
               htmlFor="categoria"
@@ -153,6 +189,9 @@ export default async function Exportar({
           <Chip tono={seleccion.length > 0 ? "turquesa" : "alerta"}>
             {seleccion.length} inscrito{seleccion.length === 1 ? "" : "s"}
           </Chip>
+          {etapaElegida && (
+            <Chip tono="nube">Etapa {etapaPorCodigo(etapaElegida)?.nombre}</Chip>
+          )}
           {catElegida && (
             <Chip tono="nube">{categoriaPorCodigo(catElegida)?.nombre}</Chip>
           )}

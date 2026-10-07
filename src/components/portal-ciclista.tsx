@@ -15,7 +15,7 @@ import {
 } from "@/components/formulario/planes-de-pago";
 import { Boton, Campo, Chip, Tarjeta } from "@/components/ui";
 import type { CuentaRecaudo } from "@/lib/catalogo";
-import { DIAS_ENTRE_CUOTAS, MAX_CUOTAS, recorridoDe } from "@/lib/catalogo";
+import { DIAS_ENTRE_CUOTAS, recorridoDe } from "@/lib/catalogo";
 import type { CuotaDelPlan } from "@/lib/dinero";
 import { fechaLarga, pesos } from "@/lib/dinero";
 import type { CanalPago, EstadoAbono, EstadoInscripcion } from "@/lib/tipos";
@@ -72,6 +72,17 @@ export type ResumenPago = {
   venceProximaCuota: string | null;
   /** Lo que tiene que cubrir el próximo comprobante. Ya no es monto libre. */
   montoMinimo: number;
+  /**
+   * El plan más largo de la etapa de ESTA inscripción: 3 si entró en la
+   * primera, 4 si entró en la segunda.
+   *
+   * Viaja con el resumen y no se importa del catálogo porque el catálogo dice
+   * cuántas cuotas admite la etapa **abierta hoy**. Para alguien de la etapa 1
+   * eso sería un cuarto plan que su inscripción no tiene, y la pantalla le
+   * diría "el plan de 4 cuotas ya no está disponible" sobre un plan que nunca
+   * existió para él.
+   */
+  maxCuotas: number;
 };
 
 export type VistaPortal = {
@@ -79,7 +90,12 @@ export type VistaPortal = {
   estado: EstadoInscripcion;
   categoria: { nombre: string; km?: number; desnivel?: number } | null;
   ciclista: { nombres: string; apellidos: string; correo: string; ciudad: string };
+  /** Lo que debe: el precio de su etapa menos su descuento. */
   total: number;
+  /** En qué etapa entró y a qué precio de lista. Su tarifa no cambia nunca. */
+  etapa: { nombre: string; precioBase: number };
+  /** Lo que se le descontó, en pesos, y con qué código. */
+  descuento: { pesos: number; codigo: string | null };
   pago: ResumenPago;
 };
 
@@ -325,9 +341,25 @@ function Inscripcion({
               {pesos(completa ? vista.total : pago.saldo)}
             </p>
           </div>
-          <p className="raya-mono text-[0.8rem] font-bold text-tinta/75">
-            {pesos(pagado)} de {pesos(vista.total)} · {pct}%
-          </p>
+          <div className="text-right">
+            <p className="raya-mono text-[0.8rem] font-bold text-tinta/75">
+              {pesos(pagado)} de {pesos(vista.total)} · {pct}%
+            </p>
+            {/*
+              Su etapa y su descuento, dichos aquí. El total de esta
+              inscripción es el de SU etapa y no se mueve cuando la
+              organización abre otra más cara: esto es lo que se lo deja
+              comprobar sin escribirnos.
+            */}
+            <p className="raya-mono mt-1 text-[0.68rem] text-tinta/75">
+              Etapa {vista.etapa.nombre}
+              {vista.descuento.pesos > 0
+                ? ` · ${pesos(vista.etapa.precioBase)} − ${pesos(vista.descuento.pesos)}${
+                    vista.descuento.codigo ? ` (${vista.descuento.codigo})` : ""
+                  }`
+                : ""}
+            </p>
+          </div>
         </div>
 
         <div
@@ -412,12 +444,12 @@ function Inscripcion({
                 />
               </div>
             )}
-            {pago.opciones.length < MAX_CUOTAS && (
+            {pago.opciones.length < pago.maxCuotas && (
               <p className="mt-3 rounded-2xl border-[3px] border-tinta bg-marea px-4 py-3 text-[0.86rem] leading-snug text-tinta">
                 <strong>
                   {pago.opciones.length === 1
                     ? "Los planes de cuotas ya no están disponibles."
-                    : `El plan de ${MAX_CUOTAS} cuotas ya no está disponible.`}
+                    : `El plan de ${pago.maxCuotas} cuotas ya no está disponible.`}
                 </strong>{" "}
                 Cada cuota va {DIAS_ENTRE_CUOTAS} días después de la anterior y
                 la última tiene que estar pagada y verificada antes del{" "}

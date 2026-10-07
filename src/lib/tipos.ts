@@ -55,9 +55,10 @@ export type EstadoInscripcion =
  *
  * Los del pago manual por transferencia dicen además **en cuántas cuotas**
  * quedó la inscripción, porque la tabla no tiene columna para ese número:
- * TOTAL es una cuota (el pago total), ABONOS_2 dos y ABONOS_3 tres. `ABONOS` a
- * secas es histórico —de cuando el único plan diferido eran dos cuotas— y se
- * lee como dos; no se escribe más. La traducción vive en `cuotasDelPlan`
+ * TOTAL es una cuota (el pago total), ABONOS_2 dos, ABONOS_3 tres y ABONOS_4
+ * cuatro (este último solo existe desde la etapa 2). `ABONOS` a secas es
+ * histórico —de cuando el único plan diferido eran dos cuotas— y se lee como
+ * dos; no se escribe más. La traducción vive en `cuotasDelPlan`
  * (`src/lib/dinero.ts`), que es el único sitio que conoce esta correspondencia.
  */
 export type PlanPago =
@@ -66,7 +67,8 @@ export type PlanPago =
   | "TOTAL"
   | "ABONOS"
   | "ABONOS_2"
-  | "ABONOS_3";
+  | "ABONOS_3"
+  | "ABONOS_4";
 
 /** Cómo paga esta inscripción: la pasarela vieja o transferencia manual. */
 export type MedioPago = "WOMPI" | "TRANSFERENCIA";
@@ -95,9 +97,12 @@ export type Abono = {
   inscripcionId: string;
   creadoEn: string;
   /**
-   * De 1 a 3: la cuota del plan a la que corresponde. El tope real es el
-   * número de cuotas de **esta** inscripción (`cuotasDelPlan`), no una
-   * constante global; MAX_CUOTAS es solo el techo de todos los planes.
+   * La cuota del plan a la que corresponde. El tope real es el número de
+   * cuotas de **esta** inscripción (`cuotasDelPlan`), no una constante global.
+   * La restricción de la base es más laxa a propósito —el plan más largo de
+   * cualquier etapa, hoy 4 por la etapa 2— porque una tabla no puede saber en
+   * qué etapa entró cada fila; quien hace cumplir el límite de verdad es
+   * `registrarAbono`.
    */
   numero: number;
   canal: CanalPago;
@@ -118,6 +123,58 @@ export type Abono = {
   revisadoEn?: string;
   revisadoPor?: string;
   motivoRechazo?: string;
+};
+
+/**
+ * Un código de referido.
+ *
+ * El código **es** la clave: dos códigos iguales no pueden existir, y una
+ * inscripción guarda el texto, no un id. Eso obliga a la regla de abajo.
+ *
+ * ── Se desactiva, no se borra ───────────────────────────────────────────────
+ * Si se borrara un código que ya usaron veinte personas, esas inscripciones
+ * quedarían apuntando al vacío: se podría ver que tuvieron descuento pero no
+ * de dónde salió, que es justo lo que alguien va a preguntar cuando haya que
+ * pagarle la comisión a un embajador. `activo = false` deja de aplicarlo a
+ * nuevas inscripciones y conserva el rastro de las viejas. Borrar solo se
+ * admite cuando el código no tiene ningún uso.
+ */
+export type CodigoReferido = {
+  /** El código tal como se escribe, normalizado en mayúsculas y sin espacios. */
+  codigo: string;
+  /**
+   * A quién pertenece: uno de los `EMBAJADORES` del catálogo o texto libre
+   * (una comunidad nueva, un aliado, una tienda). No se valida contra la
+   * lista: la organización cierra acuerdos más rápido de lo que se despliega.
+   */
+  propietario: string;
+  /** Si aplica descuento a las inscripciones nuevas. */
+  activo: boolean;
+  /**
+   * Cuántas veces se aplicó, tal como lo lleva el registro.
+   *
+   * La cifra que manda en el panel es la de verdad: cuántas inscripciones
+   * apuntan a este código. Este contador se incrementa al aplicarlo y sirve
+   * para que una diferencia entre los dos números se pueda ver en vez de
+   * quedar escondida.
+   */
+  usos: number;
+  creadoEn: string;
+  /** Nombre de quien lo creó, sacado de la sesión del panel. */
+  creadoPor: string;
+};
+
+/** Un código con lo que el panel necesita saber de su uso real. */
+export type CodigoConUsos = CodigoReferido & {
+  /** Las inscripciones que lo usaron, de la más reciente a la más antigua. */
+  inscripciones: {
+    referencia: string;
+    nombres: string;
+    apellidos: string;
+    creadaEn: string;
+    descuento: number;
+    total: number;
+  }[];
 };
 
 export type DatosCiclista = {
@@ -177,7 +234,40 @@ export type Inscripcion = {
   plan: PlanPago;
   /** Por dónde cobra esta inscripción. Las nuevas nacen TRANSFERENCIA. */
   medioPago: MedioPago;
+  /**
+   * En qué etapa entró, con su tarifa y sus planes de cuotas
+   * (`etapaDeInscripcion` en `src/lib/catalogo.ts`).
+   *
+   * Es la pieza que impide que abrir una etapa más cara le cambie la deuda a
+   * quien ya está pagando: los planes y los montos de cuota de esta
+   * inscripción salen de SU etapa, no de la activa. Las filas anteriores a
+   * esta columna son de la etapa 1 y la base las deja ahí con un DEFAULT.
+   */
+  etapa: string;
+  /**
+   * Precio de lista de su etapa el día que se inscribió, antes del descuento.
+   *
+   * `total` es lo que debe de verdad (ya rebajado) y es lo único que manda
+   * para el dinero; esto es la constancia de sobre qué cifra se calculó. Va
+   * aparte porque la tarifa de la etapa puede cambiar en el catálogo y esto no
+   * se puede mover.
+   */
+  precioBase: number;
+  /** Lo que se debe: `precioBase − descuento`. Es la única cifra que manda. */
   total: number;
+  /**
+   * El código de referido que usó, si usó alguno. Normalizado en mayúsculas,
+   * igual que la clave de `codigos_referido`.
+   */
+  codigoReferido?: string;
+  /**
+   * Lo que se le descontó, **en pesos y no en porcentaje**.
+   *
+   * Es deliberado: si mañana la organización cambia el 10% por otro número, lo
+   * que ya se le cobró a esta persona no se puede mover. Guardar el porcentaje
+   * haría que el descuento se recalculara solo, y con él el total.
+   */
+  descuento: number;
   pagado: number;
   cuotas: Cuota[];
   /** id de fuente de pago Wompi para cobros recurrentes */

@@ -3,6 +3,8 @@ import type { PoolClient } from "pg";
 import { consultar, enTransaccion } from "../db";
 import type {
   Abono,
+  CodigoConUsos,
+  CodigoReferido,
   CorreoEnviado,
   CorreoSeguido,
   Cuota,
@@ -11,6 +13,7 @@ import type {
   Inscripcion,
   ResumenCorreos,
 } from "../tipos";
+import { CODIGO_ETAPA_HISTORICA } from "../catalogo";
 
 /**
  * Almacén en Postgres. Es la implementación de producción.
@@ -34,6 +37,10 @@ type FilaInscripcion = {
   consentimientos: Inscripcion["consentimientos"];
   plan: string;
   medio_pago: string;
+  etapa: string | null;
+  precio_base: number | null;
+  codigo_referido: string | null;
+  descuento: number | null;
   total: number;
   pagado: number;
   fuente_pago_id: string | null;
@@ -88,6 +95,16 @@ function aInscripcion(f: FilaInscripcion, cuotas: Cuota[]): Inscripcion {
     // Las filas anteriores al pago manual no tienen columna llena en un
     // volcado viejo; WOMPI es lo que eran.
     medioPago: (f.medio_pago ?? "WOMPI") as Inscripcion["medioPago"],
+    // El respaldo es la etapa 1 y no la activa: un volcado anterior a esta
+    // columna es de la primera etapa, y suponer la activa le cambiaría los
+    // planes de pago y el precio de referencia.
+    etapa: f.etapa ?? CODIGO_ETAPA_HISTORICA,
+    descuento: f.descuento ?? 0,
+    codigoReferido: f.codigo_referido ?? undefined,
+    // Donde no se guardó, el precio de lista se deduce de lo que debe más lo
+    // que se le descontó. En las 142 filas de la etapa 1 eso da 380.000, que
+    // es exactamente lo que valían.
+    precioBase: f.precio_base ?? f.total + (f.descuento ?? 0),
     total: f.total,
     pagado: f.pagado,
     cuotas: cuotas.sort((a, b) => a.numero - b.numero),
@@ -146,8 +163,9 @@ export async function guardarInscripcion(
          id, referencia, creada_en, actualizada_en, estado, categoria_codigo,
          ciclista, tallas, consentimientos, plan, total, pagado,
          fuente_pago_id, tarjeta_resumen, eventos, autorizacion_cobro,
-         medio_pago
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+         medio_pago, etapa, precio_base, codigo_referido, descuento
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,
+                 $18,$19,$20,$21)
        ON CONFLICT (id) DO UPDATE SET
          actualizada_en  = EXCLUDED.actualizada_en,
          estado          = EXCLUDED.estado,
@@ -162,7 +180,17 @@ export async function guardarInscripcion(
          tarjeta_resumen = EXCLUDED.tarjeta_resumen,
          eventos         = EXCLUDED.eventos,
          autorizacion_cobro = EXCLUDED.autorizacion_cobro,
-         medio_pago      = EXCLUDED.medio_pago`,
+         medio_pago      = EXCLUDED.medio_pago,
+         -- La etapa, el precio de lista, el código y el descuento son hechos
+         -- del día en que se inscribió y nadie los cambia: viajan de vuelta
+         -- iguales porque quien llama mutó el objeto que leyó de aquí. Van en
+         -- el UPDATE —y no se omiten— para que una fila anterior a estas
+         -- columnas quede con su precio de lista escrito en vez de deducido,
+         -- sin que eso mueva ni su total ni su saldo.
+         etapa           = EXCLUDED.etapa,
+         precio_base     = EXCLUDED.precio_base,
+         codigo_referido = EXCLUDED.codigo_referido,
+         descuento       = EXCLUDED.descuento`,
       [
         inscripcion.id,
         inscripcion.referencia,
@@ -185,6 +213,10 @@ export async function guardarInscripcion(
           ? JSON.stringify(inscripcion.autorizacionCobro)
           : null,
         inscripcion.medioPago ?? "WOMPI",
+        inscripcion.etapa ?? CODIGO_ETAPA_HISTORICA,
+        inscripcion.precioBase ?? inscripcion.total + (inscripcion.descuento ?? 0),
+        inscripcion.codigoReferido ?? null,
+        inscripcion.descuento ?? 0,
       ],
     );
 
@@ -800,4 +832,179 @@ export async function resumenCorreos(desde: string): Promise<ResumenCorreos> {
     noSalieron: n("no_salieron"),
     simulados: n("simulados"),
   };
+}
+
+/* --------------------------- Códigos de referido --------------------------- */
+
+/**
+ * El registro de códigos de los embajadores.
+ *
+ * Dos reglas gobiernan estas funciones:
+ *
+ *  1. **El código es la clave.** Llega ya normalizado en mayúsculas
+ *     (`normalizarCodigo` en el catálogo); aquí no se vuelve a tocar, porque
+ *     si se guardara con una grafía y se buscara con otra el ciclista
+ *     escribiría bien y le diríamos que no existe.
+ *
+ *  2. **Se desactiva, no se borra.** Una inscripción guarda el texto del
+ *     código, no una clave ajena: borrar uno usado dejaría veinte
+ *     inscripciones con un descuento sin procedencia. `borrarCodigo` solo deja
+ *     borrar lo que nadie usó, y lo comprueba contra `inscripciones` en la
+ *     misma transacción.
+ */
+
+type FilaCodigo = {
+  codigo: string;
+  propietario: string;
+  activo: boolean;
+  usos: number;
+  creado_en: Date;
+  creado_por: string;
+};
+
+function aCodigo(f: FilaCodigo): CodigoReferido {
+  return {
+    codigo: f.codigo,
+    propietario: f.propietario,
+    activo: f.activo,
+    usos: f.usos,
+    creadoEn: f.creado_en.toISOString(),
+    creadoPor: f.creado_por,
+  };
+}
+
+export async function codigoPorTexto(
+  codigo: string,
+): Promise<CodigoReferido | undefined> {
+  const filas = await consultar<FilaCodigo>(
+    `SELECT * FROM codigos_referido WHERE codigo = $1`,
+    [codigo],
+  );
+  return filas[0] ? aCodigo(filas[0]) : undefined;
+}
+
+/**
+ * Todos los códigos con quién usó cada uno.
+ *
+ * Una consulta y no N+1: el panel enseña la lista entera con sus usos, y son
+ * dos tablas pequeñas. Los activos primero, porque son los que se dictan.
+ */
+export async function listarCodigos(): Promise<CodigoConUsos[]> {
+  const [codigos, usos] = await Promise.all([
+    consultar<FilaCodigo>(
+      `SELECT * FROM codigos_referido ORDER BY activo DESC, creado_en DESC`,
+    ),
+    consultar<{
+      codigo_referido: string;
+      referencia: string;
+      ciclista: Inscripcion["ciclista"];
+      creada_en: Date;
+      descuento: number | null;
+      total: number;
+    }>(
+      `SELECT codigo_referido, referencia, ciclista, creada_en, descuento, total
+         FROM inscripciones
+        WHERE codigo_referido IS NOT NULL
+        ORDER BY creada_en DESC`,
+    ),
+  ]);
+
+  const porCodigo = new Map<string, CodigoConUsos["inscripciones"]>();
+  for (const u of usos) {
+    const lista = porCodigo.get(u.codigo_referido) ?? [];
+    lista.push({
+      referencia: u.referencia,
+      nombres: u.ciclista?.nombres ?? "",
+      apellidos: u.ciclista?.apellidos ?? "",
+      creadaEn: u.creada_en.toISOString(),
+      descuento: u.descuento ?? 0,
+      total: u.total,
+    });
+    porCodigo.set(u.codigo_referido, lista);
+  }
+
+  return codigos.map((f) => ({
+    ...aCodigo(f),
+    inscripciones: porCodigo.get(f.codigo) ?? [],
+  }));
+}
+
+/**
+ * Crea un código. Devuelve `null` si ya existía: el panel lo dice con esas
+ * palabras en vez de pisar el que ya estaba —que podría ser de otro embajador
+ * y con usos encima.
+ */
+export async function crearCodigo(params: {
+  codigo: string;
+  propietario: string;
+  creadoPor: string;
+}): Promise<CodigoReferido | null> {
+  const filas = await consultar<FilaCodigo>(
+    `INSERT INTO codigos_referido (codigo, propietario, creado_por)
+     VALUES ($1,$2,$3)
+     ON CONFLICT (codigo) DO NOTHING
+     RETURNING *`,
+    [params.codigo, params.propietario, params.creadoPor],
+  );
+  return filas[0] ? aCodigo(filas[0]) : null;
+}
+
+export async function cambiarActivoCodigo(
+  codigo: string,
+  activo: boolean,
+): Promise<CodigoReferido | undefined> {
+  const filas = await consultar<FilaCodigo>(
+    `UPDATE codigos_referido SET activo = $2 WHERE codigo = $1 RETURNING *`,
+    [codigo, activo],
+  );
+  return filas[0] ? aCodigo(filas[0]) : undefined;
+}
+
+/**
+ * Suma un uso al código, de forma atómica.
+ *
+ * Es un UPDATE condicional y no un `SELECT` + `UPDATE`: dos inscripciones
+ * simultáneas con el mismo código tienen que sumar dos, no una. Si el código
+ * dejó de estar activo entre la validación y aquí, no cuenta y devuelve null;
+ * quien llama ya decidió el descuento con la lectura anterior, así que esto es
+ * solo el contador.
+ */
+export async function sumarUsoDeCodigo(
+  codigo: string,
+): Promise<CodigoReferido | null> {
+  const filas = await consultar<FilaCodigo>(
+    `UPDATE codigos_referido
+        SET usos = usos + 1
+      WHERE codigo = $1 AND activo
+      RETURNING *`,
+    [codigo],
+  );
+  return filas[0] ? aCodigo(filas[0]) : null;
+}
+
+/**
+ * Borra un código, y solo si nadie lo usó.
+ *
+ * El `DELETE` lleva la comprobación dentro (`NOT EXISTS`) y no en un `SELECT`
+ * previo: entre las dos sentencias podría entrar una inscripción con ese
+ * código y nos lo llevaríamos por delante justo en ese hueco.
+ *
+ * Devuelve `"CON_USOS"` cuando existe pero tiene inscripciones detrás. Eso no
+ * es un error del panel: es la regla, y la pantalla ofrece desactivarlo.
+ */
+export async function borrarCodigo(
+  codigo: string,
+): Promise<"BORRADO" | "CON_USOS" | "NO_EXISTE"> {
+  const borradas = await consultar<{ codigo: string }>(
+    `DELETE FROM codigos_referido
+      WHERE codigo = $1
+        AND NOT EXISTS (
+          SELECT 1 FROM inscripciones WHERE codigo_referido = $1
+        )
+      RETURNING codigo`,
+    [codigo],
+  );
+  if (borradas.length > 0) return "BORRADO";
+  const existe = await codigoPorTexto(codigo);
+  return existe ? "CON_USOS" : "NO_EXISTE";
 }

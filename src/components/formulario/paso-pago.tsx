@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Boton, Chip, Tarjeta } from "@/components/ui";
 import type { CuentaRecaudo } from "@/lib/catalogo";
-import { DIAS_ENTRE_CUOTAS, MAX_CUOTAS, PRENDAS, recorridoDe } from "@/lib/catalogo";
+import { DIAS_ENTRE_CUOTAS, PRENDAS, recorridoDe } from "@/lib/catalogo";
 import { fechaLarga, pesos } from "@/lib/dinero";
 import type { Categoria, DatosCiclista, Tallas } from "@/lib/tipos";
 import { CajaEvidencia, type AbonoRegistrado } from "./caja-evidencia";
@@ -11,6 +11,7 @@ import { CuentasRecaudo } from "./cuentas-recaudo";
 import {
   OpcionesDePlan,
   TablaDelPlan,
+  type EtapaVisible,
   type PlanOfrecido,
 } from "./planes-de-pago";
 
@@ -35,6 +36,12 @@ export function PasoPago({
   cuentas,
   fechaLimite,
   planes,
+  etapa,
+  total,
+  precioBase,
+  descuento,
+  codigoReferido,
+  avisoCodigo,
   onCompletado,
 }: {
   referencia: string;
@@ -52,6 +59,26 @@ export function PasoPago({
    * comprobante, se explica abajo por qué no están.
    */
   planes: PlanOfrecido[];
+  /** La etapa en la que entró esta inscripción. */
+  etapa: EtapaVisible;
+  /**
+   * Lo que de verdad debe, ya rebajado si el código aplicó. Es la cifra que
+   * manda en toda esta pantalla.
+   *
+   * No se usa `categoria.precio`: eso es la tarifa vigente del catálogo, y con
+   * descuento no es lo que esta persona tiene que transferir. Confundirlos
+   * haría que la pantalla pidiera 470.000 a quien debe 423.000, y el servidor
+   * aceptaría el comprobante por menos dejando al ciclista con un saldo que
+   * nadie le anunció.
+   */
+  total: number;
+  /** Precio de lista de su etapa, antes del descuento. Solo para explicarlo. */
+  precioBase: number;
+  /** Lo que se le descontó, en pesos. 0 si no hubo código. */
+  descuento: number;
+  codigoReferido: string | null;
+  /** Qué pasó con el código si no se pudo aplicar. `null` si no hay nada que decir. */
+  avisoCodigo: string | null;
   onCompletado: () => void;
 }) {
   // El plan de una cuota —el pago total— siempre está y es el que arranca
@@ -66,10 +93,11 @@ export function PasoPago({
   const ultima = plan[plan.length - 1];
   // Lo que el ciclista tiene que transferir ahora mismo. No es una sugerencia:
   // el servidor rechaza un comprobante por debajo de esta cifra.
-  const aTransferir = enCuotas ? plan[0].monto : categoria.precio;
+  const aTransferir = enCuotas ? plan[0].monto : total;
   // Cuántas cuotas admitiría el calendario si no hubiera cierre. Sirve para
-  // decir qué falta y por qué.
-  const faltanPlanes = planes.length < MAX_CUOTAS;
+  // decir qué falta y por qué. El techo es el de SU etapa: en la primera son
+  // tres planes y en la segunda cuatro.
+  const faltanPlanes = planes.length < etapa.maxCuotas;
 
   const recorrido = recorridoDe(categoria);
   const resumen: [string, string][] = [
@@ -118,19 +146,19 @@ export function PasoPago({
           </a>
         </div>
 
-        {exito.montoDeclarado < categoria.precio && plan.length > 1 && (
+        {exito.montoDeclarado < total && plan.length > 1 && (
           <p className="mt-6 rounded-2xl border-[3px] border-tinta bg-sol px-4 py-3 text-[0.9rem] font-semibold leading-snug text-tinta">
             {plan.length === 2 ? (
               <>
                 Te queda la segunda y última cuota:{" "}
-                {pesos(categoria.precio - exito.montoDeclarado)}, con plazo
-                hasta el {fechaLarga(ultima.vence)}.
+                {pesos(total - exito.montoDeclarado)}, con plazo hasta el{" "}
+                {fechaLarga(ultima.vence)}.
               </>
             ) : (
               <>
                 Te quedan {plan.length - 1} cuotas por{" "}
-                {pesos(categoria.precio - exito.montoDeclarado)} en total: la
-                siguiente el {fechaLarga(plan[1].vence)} y la última el{" "}
+                {pesos(total - exito.montoDeclarado)} en total: la siguiente el{" "}
+                {fechaLarga(plan[1].vence)} y la última el{" "}
                 {fechaLarga(ultima.vence)}.
               </>
             )}{" "}
@@ -176,7 +204,71 @@ export function PasoPago({
             </div>
           ))}
         </dl>
+
+        {/*
+          El desglose del precio. Va aquí y no en letra pequeña porque es la
+          cifra sobre la que se calculan todas sus cuotas, y porque el ciclista
+          tiene que poder comprobar que el descuento que le prometieron está
+          aplicado antes de transferir un peso.
+        */}
+        <div className="mt-4 border-t-2 border-dashed border-tinta/15 pt-4">
+          {descuento > 0 ? (
+            <>
+              <div className="flex items-baseline justify-between gap-4 text-[0.85rem]">
+                <span className="text-tinta/75">
+                  Inscripción · etapa {etapa.nombre}
+                </span>
+                <span className="raya-mono text-tinta/75">
+                  {pesos(precioBase)}
+                </span>
+              </div>
+              <div className="mt-1 flex items-baseline justify-between gap-4 text-[0.85rem]">
+                <span className="text-tinta/75">
+                  Descuento{codigoReferido ? ` · ${codigoReferido}` : ""}
+                </span>
+                <span className="raya-mono font-bold text-rio">
+                  −{pesos(descuento)}
+                </span>
+              </div>
+              <div className="mt-2 flex items-baseline justify-between gap-4 border-t-2 border-tinta/20 pt-2">
+                <span className="font-display text-[0.95rem] font-extrabold text-tinta">
+                  Total a pagar
+                </span>
+                <span className="raya-mono text-[1.15rem] font-bold text-tinta">
+                  {pesos(total)}
+                </span>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-baseline justify-between gap-4">
+              <span className="font-display text-[0.95rem] font-extrabold text-tinta">
+                Total · etapa {etapa.nombre}
+              </span>
+              <span className="raya-mono text-[1.15rem] font-bold text-tinta">
+                {pesos(total)}
+              </span>
+            </div>
+          )}
+        </div>
       </Tarjeta>
+
+      {/*
+        El código que no se pudo aplicar. En amarillo y no en rojo: la
+        inscripción está creada y el cupo reservado, así que no es un fallo —es
+        una noticia que conviene dar antes de que transfiera.
+      */}
+      {avisoCodigo && (
+        <Tarjeta tono="sol" className="p-5 sm:p-6">
+          <p className="font-display text-[1rem] font-extrabold leading-snug text-tinta">
+            Tu código no se pudo aplicar.
+          </p>
+          <p className="mt-1.5 text-[0.9rem] leading-relaxed text-tinta/85">
+            {avisoCodigo} Si crees que es un error, escríbenos antes de
+            transferir: una vez verificado el comprobante, el total no se
+            recalcula.
+          </p>
+        </Tarjeta>
+      )}
 
       {/* -------------------------------- Plan ------------------------------- */}
       <fieldset className="border-0 p-0">
@@ -188,7 +280,7 @@ export function PasoPago({
           opciones={planes}
           elegido={cuotas}
           onElegir={setCuotas}
-          total={categoria.precio}
+          total={total}
         />
 
         {/*
@@ -212,7 +304,7 @@ export function PasoPago({
             <strong>
               {planes.length === 1
                 ? "Los planes de cuotas ya no están disponibles."
-                : `El plan de ${MAX_CUOTAS} cuotas ya no está disponible.`}
+                : `El plan de ${etapa.maxCuotas} cuotas ya no está disponible.`}
             </strong>{" "}
             Cada cuota va {DIAS_ENTRE_CUOTAS} días después de la anterior y la
             última tiene que estar pagada y verificada antes del{" "}

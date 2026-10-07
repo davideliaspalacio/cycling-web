@@ -3,7 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Boton, Campo } from "@/components/ui";
-import { EMBAJADORES, LARGO_MAX_CODIGO, normalizarCodigo } from "@/lib/catalogo";
+import {
+  codigoSugerido,
+  EMBAJADORES,
+  LARGO_MAX_CODIGO,
+  normalizarCodigo,
+} from "@/lib/catalogo";
 
 /**
  * Las tres acciones sobre un código: crear, activar/desactivar y borrar.
@@ -26,6 +31,24 @@ export function CrearCodigo() {
   const [listo, setListo] = useState<string | null>(null);
 
   const normalizado = normalizarCodigo(codigo);
+
+  /*
+   * Un código es adivinable cuando no lleva nada al azar: letras, números
+   * sueltos al final y poco más. No se bloquea —puede haber un acuerdo donde
+   * el código pactado es el que es—, pero sí se avisa, porque quien lo crea no
+   * tiene por qué saber que hay una ruta pública que responde si existe.
+   *
+   * La regla es tosca a propósito: si tras quitarle los números del final y
+   * los separadores queda algo corto y sin mezcla de letras y dígitos, es una
+   * palabra. Lo que genera `codigoSugerido` nunca cae aquí.
+   */
+  const adivinable = (() => {
+    if (normalizado.length < 4) return false;
+    const sufijo = normalizado.split(/[-_]/).pop() ?? "";
+    const tieneAzar =
+      sufijo.length >= 5 && /[A-Z]/.test(sufijo) && /[0-9]/.test(sufijo);
+    return !tieneAzar;
+  })();
 
   async function crear() {
     setEnviando(true);
@@ -61,18 +84,38 @@ export function CrearCodigo() {
           id="codigo-nuevo"
           etiqueta="El código"
           obligatorio
-          ayuda={`Se guarda en mayúsculas y sin tildes: ${normalizado || "PICHURRIAS10"}. Se lo vas a dictar por WhatsApp, así que corto.`}
+          ayuda={`Se guarda en mayúsculas y sin tildes: ${normalizado || "XTREME-7F3QK2"}. Se lo vas a dictar por WhatsApp, así que corto.`}
         >
-          <input
-            id="codigo-nuevo"
-            className="campo raya-mono uppercase"
-            autoComplete="off"
-            spellCheck={false}
-            maxLength={LARGO_MAX_CODIGO}
-            placeholder="XTREME-7F3QK2"
-            value={codigo}
-            onChange={(e) => setCodigo(e.target.value)}
-          />
+          <>
+            <div className="flex gap-2">
+              <input
+                id="codigo-nuevo"
+                className="campo raya-mono uppercase"
+                autoComplete="off"
+                spellCheck={false}
+                maxLength={LARGO_MAX_CODIGO}
+                placeholder="XTREME-7F3QK2"
+                value={codigo}
+                onChange={(e) => setCodigo(e.target.value)}
+              />
+              <Boton
+                type="button"
+                tono="nube"
+                onClick={() => setCodigo(codigoSugerido(propietario))}
+              >
+                Generar
+              </Boton>
+            </div>
+            {adivinable && (
+              <p className="mt-2 rounded-2xl border-[3px] border-tinta bg-sol px-4 py-3 text-[0.82rem] font-semibold leading-snug">
+                Ese código se puede adivinar. La página pregunta en público si
+                un código da descuento, y los nombres de los embajadores están
+                publicados en el formulario de inscripción: alguien puede
+                probar «{normalizado}» sin que nadie se lo haya dado. Dale a
+                Generar y quedará con seis caracteres al azar.
+              </p>
+            )}
+          </>
         </Campo>
 
         <Campo

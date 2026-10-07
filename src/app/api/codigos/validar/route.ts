@@ -33,10 +33,16 @@ import { esquemaRevisionCodigo } from "@/lib/validacion";
  *    guarda en la bitácora de la inscripción, que es donde hace falta para
  *    contestarle a quien reclame.
  *
- * 2. **Un límite por IP**, que convierte recorrer el diccionario en algo lento
- *    y visible en los registros. No es una defensa completa —el contador vive
- *    en memoria y hay varias instancias—, pero sube el coste de lo que antes
- *    era gratis.
+ * 2. **Un límite por IP**, con el contador compartido en la base. La primera
+ *    versión lo llevaba en memoria y en producción no limitaba nada, porque
+ *    cada instancia contaba por su cuenta: 120 peticiones seguidas pasaron sin
+ *    un solo 429. Está contado en `limite-peticiones.ts`.
+ *
+ * Pero lo que de verdad cierra el problema no es ninguna de las dos, es que el
+ * código no se pueda adivinar. `codigoSugerido` genera seis caracteres al azar
+ * —mil millones de combinaciones— y el panel avisa si el código que se está
+ * creando es una palabra. Un límite solo hace más lento lo que la entropía
+ * hace inútil.
  *
  * Lo que sigue faltando, y es decisión de la organización: un tope de usos por
  * código. Hoy un código filtrado sirve para las 250 inscripciones de la etapa.
@@ -72,7 +78,7 @@ const AVISO_GENERICO =
 
 export async function POST(peticion: Request) {
   const ip = ipDeLaPeticion(peticion);
-  const veredicto = anotarPeticion(
+  const veredicto = await anotarPeticion(
     `codigos-validar:${ip}`,
     MAXIMO_POR_VENTANA,
     VENTANA_SEGUNDOS,

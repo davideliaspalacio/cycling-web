@@ -300,3 +300,28 @@ CREATE TABLE IF NOT EXISTS codigos_referido (
 -- reciente arriba.
 CREATE INDEX IF NOT EXISTS codigos_referido_activo_idx
   ON codigos_referido (activo, creado_en DESC);
+
+-- ---------------------------------------------------------------------------
+-- Límite de peticiones
+-- ---------------------------------------------------------------------------
+-- Un contador por clave y ventana de tiempo, para las rutas públicas que
+-- responden algo que vale dinero. Hoy solo la usa `/api/codigos/validar`.
+--
+-- **Por qué en la base y no en memoria.** Se intentó primero con un Map en el
+-- proceso y en producción no limitaba nada: Vercel reparte las peticiones
+-- entre varias instancias y cada una llevaba su propia cuenta. Ciento veinte
+-- peticiones seguidas pasaron sin un solo 429. Un contador compartido es la
+-- única forma de que el techo sea el que dice ser.
+--
+-- Las filas caducan solas: cada petición reinicia la cuenta si la ventana ya
+-- venció, y `limpiarLimitesVencidos` barre las viejas de vez en cuando. No
+-- hace falta un cron.
+CREATE TABLE IF NOT EXISTS limite_peticiones (
+  clave     text        PRIMARY KEY,
+  cuenta    integer     NOT NULL DEFAULT 0 CHECK (cuenta >= 0),
+  expira_en timestamptz NOT NULL
+);
+
+-- Para el barrido de las vencidas.
+CREATE INDEX IF NOT EXISTS limite_peticiones_expira_idx
+  ON limite_peticiones (expira_en);

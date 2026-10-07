@@ -570,3 +570,54 @@ export function normalizarCodigo(valor: string): string {
     .replace(/[^A-Z0-9_-]/g, "")
     .slice(0, LARGO_MAX_CODIGO);
 }
+
+/**
+ * Las letras y números con que se arma un código, sin los que se confunden al
+ * dictarlos: no hay O ni 0, ni I ni 1. Un embajador va a leer su código en voz
+ * alta por teléfono y por WhatsApp, y «¿eso es o de oso o cero?» es justo la
+ * pregunta que no queremos.
+ */
+const ALFABETO_CODIGO = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+/** Cuántos caracteres al azar lleva un código generado. */
+const LARGO_SUFIJO = 6;
+
+/**
+ * Un sufijo al azar para un código de referido.
+ *
+ * Esto no es un adorno. `/api/codigos/validar` es pública y tiene que serlo —el
+ * formulario de inscripción lo es—, y responde si un código da descuento. Un
+ * código que se llame como su embajador se adivina a la primera, porque los 22
+ * nombres salen publicados en el desplegable «¿quién te trajo?» de ese mismo
+ * formulario. Con seis caracteres al azar hay mil millones de combinaciones y
+ * no hay diccionario que sirva.
+ *
+ * Es la defensa que de verdad cierra el problema. Un límite de peticiones solo
+ * lo hace más lento.
+ */
+export function sufijoAleatorio(largo = LARGO_SUFIJO): string {
+  const bytes = new Uint8Array(largo);
+  globalThis.crypto.getRandomValues(bytes);
+  let salida = "";
+  for (const b of bytes) {
+    salida += ALFABETO_CODIGO[b % ALFABETO_CODIGO.length];
+  }
+  return salida;
+}
+
+/**
+ * Un código completo para un embajador: su nombre reconocible y un sufijo que
+ * no se puede adivinar.
+ *
+ * El nombre delante porque el embajador tiene que reconocer el suyo de un
+ * vistazo en el panel, y al liquidarle su comisión hay que saber de quién es
+ * sin cruzar tablas. Se recorta para que quepa el sufijo entero: el nombre es
+ * comodidad, el sufijo es lo que protege, y si hay que sacrificar algo se
+ * sacrifica la comodidad.
+ */
+export function codigoSugerido(propietario: string): string {
+  const sufijo = sufijoAleatorio();
+  const sitioParaNombre = LARGO_MAX_CODIGO - sufijo.length - 1;
+  const nombre = normalizarCodigo(propietario).slice(0, sitioParaNombre);
+  return nombre ? `${nombre}-${sufijo}` : sufijo;
+}

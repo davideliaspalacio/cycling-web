@@ -43,6 +43,16 @@ type Respuesta = {
   aviso: string | null;
 };
 
+/**
+ * Lo que se ve en gris dentro del campo cuando está vacío.
+ *
+ * No es un código de ejemplo, es la palabra «código de referido»: esta página
+ * es pública y el desplegable de embajadores está justo encima, así que un
+ * ejemplo con forma de código real —«NOMBREDELEMBAJADOR10»— sería la receta
+ * para adivinar el de otro. Una etiqueta no enseña ningún patrón.
+ */
+const EJEMPLO_CODIGO = "CODIGODEREFERIDO";
+
 export function CampoCodigoReferido({
   precio,
   porcentaje,
@@ -139,13 +149,7 @@ export function CampoCodigoReferido({
             autoCapitalize="characters"
             spellCheck={false}
             maxLength={LARGO_MAX_CODIGO}
-            {/*
-              Un ejemplo con sufijo al azar, no «nombre del embajador + 10».
-              Esta página es pública y el desplegable de arriba lista a los 22
-              embajadores: enseñar aquí el patrón real sería dar la receta para
-              adivinar códigos ajenos.
-            */}
-            placeholder="XTREME-7F3QK2"
+            placeholder={EJEMPLO_CODIGO}
             value={texto}
             onChange={(e) => escribir(e.target.value)}
           />

@@ -62,6 +62,7 @@ export const borrarCodigo = impl.borrarCodigo;
 export const registrarCorreo = impl.registrarCorreo;
 export const listarCorreos = impl.listarCorreos;
 export const correoPorId = impl.correoPorId;
+export const ultimoCorreoPorPlantilla = impl.ultimoCorreoPorPlantilla;
 // Seguimiento de entrega: lo que los webhooks del proveedor van anotando
 // encima de un correo ya enviado, y lo que /panel/correos lee de ahí.
 export const correoDelProveedor = impl.correoDelProveedor;

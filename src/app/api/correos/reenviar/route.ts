@@ -1,5 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { abonosDe, listarCorreos, listarInscripciones } from "@/lib/almacen";
+import {
+  abonosDe,
+  listarInscripciones,
+  ultimoCorreoPorPlantilla,
+} from "@/lib/almacen";
 import { enviarAlCiclista, MODO_CORREO } from "@/lib/correos/enviar";
 import {
   evidenciaVerificada,
@@ -95,18 +99,23 @@ export async function GET(peticion: NextRequest) {
     );
   }
 
-  const [inscripciones, correos] = await Promise.all([
+  /*
+   * `ultimoCorreoPorPlantilla` y no `listarCorreos`: esa segunda trae solo las
+   * 200 filas más recientes, porque está hecha para la pantalla del panel. Con
+   * ella, en cuanto la tabla pasó de 200 correos, la gente más antigua empezó
+   * a parecer que no había recibido nunca nada — y se le reenvió. Ocho
+   * personas recibieron por duplicado un correo de septiembre antes de que
+   * esto se arreglara. Decidir a quién se le escribe con una consulta que
+   * tiene tope de filas no puede volver a pasar.
+   */
+  const [inscripciones, ultimoPorClave] = await Promise.all([
     listarInscripciones(),
-    listarCorreos(),
+    ultimoCorreoPorPlantilla(),
   ]);
 
-  /** El último envío de cada (referencia, plantilla), para no repetir. */
   const ultimoEnvio = new Map<string, number>();
-  for (const c of correos) {
-    if (!c.referencia) continue;
-    const clave = `${c.referencia}·${c.plantilla}`;
-    const cuando = new Date(c.enviadoEn).getTime();
-    if (cuando > (ultimoEnvio.get(clave) ?? 0)) ultimoEnvio.set(clave, cuando);
+  for (const [clave, cuando] of ultimoPorClave) {
+    ultimoEnvio.set(clave, new Date(cuando).getTime());
   }
 
   const pendientes: Pendiente[] = [];

@@ -281,6 +281,19 @@ export async function listarCorreos(): Promise<CorreoEnviado[]> {
   return registros;
 }
 
+/** Ver la nota en `postgres.ts`: no puede tener tope de filas. */
+export async function ultimoCorreoPorPlantilla(): Promise<Map<string, string>> {
+  const { registros } = await leer<CorreoEnviado>(ARCHIVO_CORREOS);
+  const mapa = new Map<string, string>();
+  for (const c of registros) {
+    if (!c.referencia) continue;
+    const clave = `${c.referencia}·${c.plantilla}`;
+    const actual = mapa.get(clave);
+    if (!actual || c.enviadoEn > actual) mapa.set(clave, c.enviadoEn);
+  }
+  return mapa;
+}
+
 export async function correoPorId(id: string): Promise<CorreoEnviado | undefined> {
   const { registros } = await leer<CorreoEnviado>(ARCHIVO_CORREOS);
   return registros.find((c) => c.id === id);

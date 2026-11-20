@@ -610,6 +610,31 @@ export async function listarCorreos(): Promise<CorreoEnviado[]> {
   return filas.map(aCorreo);
 }
 
+/**
+ * El último envío de cada par (referencia, plantilla).
+ *
+ * Existe porque `listarCorreos` trae solo los 200 más recientes: está hecha
+ * para la pantalla del panel, no para decidir. Usarla para saber si alguien ya
+ * recibió un correo hace que, en cuanto la tabla pasa de 200 filas, la gente
+ * más antigua parezca no haber recibido nunca nada — y se le reenvíe. Pasó:
+ * ocho personas recibieron por duplicado un correo de septiembre.
+ */
+export async function ultimoCorreoPorPlantilla(): Promise<
+  Map<string, string>
+> {
+  const filas = await consultar<{
+    referencia: string;
+    plantilla: string;
+    ultimo: string;
+  }>(
+    `SELECT referencia, plantilla, max(enviado_en)::text AS ultimo
+       FROM correos
+      WHERE referencia IS NOT NULL
+      GROUP BY referencia, plantilla`,
+  );
+  return new Map(filas.map((f) => [`${f.referencia}·${f.plantilla}`, f.ultimo]));
+}
+
 export async function correoPorId(
   id: string,
 ): Promise<CorreoEnviado | undefined> {

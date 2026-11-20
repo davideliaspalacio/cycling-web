@@ -562,7 +562,7 @@ export function evidenciaRecibida(
 export function evidenciaVerificada(
   ins: Inscripcion,
   abono: Abono,
-  datos: { verificado: number; saldo: number },
+  datos: { verificado: number; saldo: number; nota?: string },
 ): PlantillaCorreo {
   const aprobado = abono.montoAprobado ?? abono.montoDeclarado;
   const difiere = aprobado !== abono.montoDeclarado;
@@ -580,6 +580,9 @@ export function evidenciaVerificada(
       : `Sigue la <strong>cuota ${siguiente.numero} de ${plan.length}: ${pesos(aPagar)}</strong>, con plazo hasta el <strong>${fechaLarga(siguiente.vence)}</strong>. Un comprobante por cuota, y cada uno tiene que cubrir su monto completo.`
     : `Falta cubrir <strong>${pesos(datos.saldo)}</strong>, con plazo hasta el <strong>${fechaLarga(FECHA_LIMITE_ABONOS)}</strong>.`;
   const cuerpo =
+    // La nota va antes que nada: si este correo llega con retraso, lo primero
+    // que necesita saber quien lo abre es por qué, no cuánto pagó.
+    (datos.nota ? recuadroMotivo("Por qué te llega esto ahora", datos.nota) : "") +
     parrafo(
       `${nombreCorto(ins)}, verificamos tu comprobante: <strong>${pesos(aprobado)}</strong> entraron a tu inscripción.`,
     ) +
@@ -623,12 +626,13 @@ export function evidenciaVerificada(
  */
 export function inscripcionCompleta(
   ins: Inscripcion,
-  datos?: { excedente?: number },
+  datos?: { excedente?: number; nota?: string },
 ): PlantillaCorreo {
   const cat = categoriaPorCodigo(ins.categoriaCodigo);
   const recorrido = recorridoDe(cat);
   const sobra = datos?.excedente ?? 0;
   const cuerpo =
+    (datos?.nota ? recuadroMotivo("Por qué te llega esto ahora", datos.nota) : "") +
     parrafo(
       `${nombreCorto(ins)}, cubriste el total. Tu inscripción a <strong>${cat?.nombre}</strong> queda pagada por completo: ${pesos(ins.total)}, sin un peso de recargo.`,
     ) +

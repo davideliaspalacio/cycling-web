@@ -574,10 +574,21 @@ export function evidenciaVerificada(
   const aPagar = esLaUltima
     ? datos.saldo
     : Math.min(siguiente!.monto, datos.saldo);
+  /*
+   * Si la fecha de la próxima cuota ya pasó, no se puede decir "tienes plazo
+   * hasta" una fecha de hace un mes: es información falsa, y al que va tarde
+   * le suena a que el sistema no se ha enterado. Se le dice que venció y que
+   * se ponga al día, que es lo que necesita leer.
+   */
+  const vencida = Boolean(
+    siguiente && new Date(siguiente.vence).getTime() < Date.now(),
+  );
   const queSigue = siguiente
-    ? esLaUltima
-      ? `Falta la <strong>última cuota: ${pesos(datos.saldo)}</strong>, con plazo hasta el <strong>${fechaLarga(siguiente.vence)}</strong>. Es un solo comprobante más y tiene que cubrir ese monto completo.`
-      : `Sigue la <strong>cuota ${siguiente.numero} de ${plan.length}: ${pesos(aPagar)}</strong>, con plazo hasta el <strong>${fechaLarga(siguiente.vence)}</strong>. Un comprobante por cuota, y cada uno tiene que cubrir su monto completo.`
+    ? vencida
+      ? `Te quedan <strong>${pesos(datos.saldo)}</strong>, y el plazo de ${esLaUltima ? "la última cuota" : `la cuota ${siguiente.numero} de ${plan.length}`} <strong>venció el ${fechaLarga(siguiente.vence)}</strong>. Súbenos el comprobante en cuanto puedas para no perder el cupo; si ya transferiste y no lo has subido, hazlo desde tu portal. Cualquier lío, escríbenos a ${EVENTO.correoContacto}.`
+      : esLaUltima
+        ? `Falta la <strong>última cuota: ${pesos(datos.saldo)}</strong>, con plazo hasta el <strong>${fechaLarga(siguiente.vence)}</strong>. Es un solo comprobante más y tiene que cubrir ese monto completo.`
+        : `Sigue la <strong>cuota ${siguiente.numero} de ${plan.length}: ${pesos(aPagar)}</strong>, con plazo hasta el <strong>${fechaLarga(siguiente.vence)}</strong>. Un comprobante por cuota, y cada uno tiene que cubrir su monto completo.`
     : `Falta cubrir <strong>${pesos(datos.saldo)}</strong>, con plazo hasta el <strong>${fechaLarga(FECHA_LIMITE_ABONOS)}</strong>.`;
   const cuerpo =
     // La nota va antes que nada: si este correo llega con retraso, lo primero

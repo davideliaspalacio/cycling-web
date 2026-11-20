@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { abonosDe, listarCorreos, listarInscripciones } from "@/lib/almacen";
 import { enviarAlCiclista, MODO_CORREO } from "@/lib/correos/enviar";
 import {
@@ -6,6 +6,7 @@ import {
   inscripcionCompleta,
 } from "@/lib/correos/plantillas";
 import { resumenDePago } from "@/lib/servicio";
+import { COOKIE_SESION, leerSesion } from "@/lib/sesion";
 import type { Inscripcion } from "@/lib/tipos";
 
 export const dynamic = "force-dynamic";
@@ -41,7 +42,10 @@ export const maxDuration = 300;
  * ── Cómo se usa ────────────────────────────────────────────────────────────
  *   GET  → simulacro: dice a quién y qué, sin mandar nada.
  *   GET ?enviar=1 → manda de verdad.
- * Con `Authorization: Bearer $CRON_SECRET`, igual que `/api/cobros`.
+ * Vale cualquiera de las dos credenciales: el bearer de CRON_SECRET, igual
+ * que `/api/cobros`, o la sesión del panel. La segunda existe para que quien
+ * maneja el evento pueda mirar la lista y soltar el envío desde su navegador
+ * sin que nadie tenga que pasarse un secreto por un chat.
  */
 
 /** Lo que se le dice a quien abre un correo de algo de hace seis semanas. */
@@ -68,10 +72,13 @@ type Pendiente = {
   motivo: string;
 };
 
-export async function GET(peticion: Request) {
+export async function GET(peticion: NextRequest) {
   const secreto = process.env.CRON_SECRET ?? process.env.CRON_SECRETO;
-  const autorizacion = peticion.headers.get("authorization");
-  if (!secreto || autorizacion !== `Bearer ${secreto}`) {
+  const porBearer = Boolean(
+    secreto && peticion.headers.get("authorization") === `Bearer ${secreto}`,
+  );
+  const sesion = leerSesion(peticion.cookies.get(COOKIE_SESION)?.value);
+  if (!porBearer && !sesion) {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   }
 
